@@ -1,4 +1,4 @@
-# Grapl: Great... Really? Another programming language? 
+# Grapl (Grapple): Great... Really? Another programming language? 
 
 Simple programming language for fun made with [zig](https://github.com/ziglang/zig).
 
