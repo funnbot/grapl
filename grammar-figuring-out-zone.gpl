@@ -1,0 +1,49 @@
+i Int = 10
+a Str = "hi"
+f Float = 1.2
+s UInt = 1;
+e UInt[32] = 12; 
+eat List[Int] = {1, 2, 3}
+end Bool = true;
+
+
+// Tuples
+ee (Int, Float) = (10, 10.2)
+be (Int, Float) = (10 Int, 10.2 Float)
+beef = (10 Int, 10.2 Float)
+
+InsteadBool :: enum { DoIt, DontDoIt }
+
+// Comptime types, proto, so on, Rigid
+[ ]
+// Tuple, Comptime length/types, but runtime values, Fluid
+(a Int, b Float)
+// function call is just passing a tuple to the function
+func(a, b)
+
+// Bind a type to a name
+myFunc :: fn[a Int => Float, Int] {
+
+}
+// Assign a type instance (value) to a name
+myVar = 1;
+
+case[Int] { 0 => myFunc() }
+
+MyEnum = enum {
+
+}
+
+add = f[a Int, b Int => Int] {
+
+}
+
+case {
+    
+}
+
+// Keywords define blocks
+struct[Interface], enum, fn(Proto), case(input), macro(Proto), union
+
+// macro -> type reflection, text replacement, cool stuff, but not as crazy as C++, still just a function call
+// Macros can return types, macros are used for generics, memoized

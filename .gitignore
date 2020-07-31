@@ -1,0 +1,7 @@
+# .vscode/
+
+zig-cache/
+
+#personal workspace stuff
+test.gpl
+test.sh
