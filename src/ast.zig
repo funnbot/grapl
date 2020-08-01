@@ -89,13 +89,17 @@ fn nodeToSource(list: *ArrayListWriter, treeNode: *TreeNode) anyerror!void {
         },
         .FuncCall => |node| {
             try nodeToSource(list, node.callee);
-            if (node.args.tagType() != .Tuple) try list.writeAll("(");
-            try nodeToSource(list, node.args);
-            if (node.args.tagType() != .Tuple) try list.writeAll(")");
+            if (node.args) |args| {
+                if (args.tagType() != .Tuple) try list.writeAll("(");
+                try nodeToSource(list, args);
+                if (args.tagType() != .Tuple) try list.writeAll(")");
+            } else
+                try list.writeAll("()");
         },
         .Type => |node| try list.print("{}", .{node.typename}),
         .Constant => |node| try list.print("{}", .{node.chars}),
         .Variable => |node| try list.print("{}", .{node.name}),
+        .Error => |node| try list.print("\u{001b}[31m!{}!\u{001b}[0m", .{node.msg}),
         else => |node| try list.print("!{}!", .{treeNode.typeName()}),
     }
 }

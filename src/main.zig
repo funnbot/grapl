@@ -10,7 +10,7 @@ var path: []const u8 = undefined;
 
 const PRINT_SOURCE = false;
 const PRINT_SCANNER = false;
-const PRINT_AST = false;
+const PRINT_AST = true;
 const PRINT_AST_TO_SOURCE = true;
 
 pub fn main() !void {

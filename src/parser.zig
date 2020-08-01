@@ -44,9 +44,7 @@ pub fn init(allocator: *Allocator) Self {
     };
 }
 
-pub fn deinit(self: *Self) void {
-
-}
+pub fn deinit(self: *Self) void {}
 
 pub const ParserErrorOption = enum { ShowErrors, SuppressErrors };
 /// Caller owns ast, use ast.destroy()
@@ -68,7 +66,7 @@ pub fn parse(self: *Self, source: []const u8, parser_error_opt: ParserErrorOptio
             try self.err("Expect expression terminal.");
         }
     }
-    
+
     return self.ast;
 }
 
@@ -87,13 +85,10 @@ fn statement(self: *Self) ParseError!*Node {
 
 const VarDefineStmtMutability = enum { Mutable, Constant };
 fn varDefineStmt(self: *Self, mut: VarDefineStmtMutability) ParseError!*Node {
-    var name = self.current.chars;
-    var typename: ?*Node = null;
-    if (self.matchAdvance(.Identifier)) {
-        typename = try self.createNode(Node.TypeNode.init(self.current.chars));
-    }
+    const name = self.current.chars;
+    const typename = try self.parseTypeOpt();
     try self.consume(.Equal, "expect variable assignment.");
-    var expr = try self.expression();
+    const expr = try self.expression();
 
     return self.createNode(Node.VarDefineNode.init(name, typename, expr, mut == .Mutable));
 }
@@ -103,15 +98,51 @@ fn varDefineStmt(self: *Self, mut: VarDefineStmtMutability) ParseError!*Node {
 // -----------
 
 fn parseTypeOpt(self: *Self) ParseError!?*Node {
-    return if (self.next.tokenType == .Identifier)
+    return if (self.next.tokenType == .Identifier or self.next.tokenType == .LeftParen)
         self.parseType()
     else
         null;
 }
 
 fn parseType(self: *Self) ParseError!*Node {
-    self.consume(.Identifier, "expect typename.");
-    var typename = self.current.chars;
+    if (self.next.tokenType == .LeftParen) {
+        return self.parseTupleType();
+    }
+
+    try self.consume(.Identifier, "expect typename.");
+    const typename = self.current.chars;
+    const typeNode = try self.createNode(Node.TypeNode.init(typename));
+
+    if (self.next.tokenType == .LeftParen) {
+        const args = try self.parseTuple(.AllowEmpty, "macro arguments");
+        return self.createNode(Node.FuncCallNode.init(typeNode, args));
+    }
+    return typeNode;
+}
+
+fn parseTupleType(self: *Self) ParseError!*Node {
+    try self.consume(.LeftParen, "expect '(' to begin tuple type.");
+
+    if (self.next.tokenType == .RightParen)
+        return self.errNode("expect atleast two types within tuple type, found none.");
+
+    const first = try self.parseType();
+
+    if (self.next.tokenType == .RightParen)
+        return self.errNode("expect atleast two types within tuple type, found one.");
+
+    var tupleNode = try self.createNode(Node.TupleNode.init(self.ast.allocator));
+    try self.appendNode(&tupleNode.Tuple.list, first);
+
+    while (self.matchAdvance(.Comma)) {
+        // Calling into expression parser for arbitrarily complex macro calls, scary
+        const next = try self.parseType();
+        try self.appendNode(&tupleNode.Tuple.list, next);
+    }
+
+    try self.consume(.RightParen, "expect ')' to terminate tuple.");
+
+    return tupleNode;
 }
 
 // -----------------
@@ -176,7 +207,7 @@ fn parseFlow(self: *Self, prec: Precedence) ParseError!*Node {
 }
 
 fn parseTernary(self: *Self, prec: Precedence) ParseError!*Node {
-    var node = try self.parsePrec(prec.next());
+    const node = try self.parsePrec(prec.next());
     if (self.matchAdvance(.Question)) {
         var first = try self.expression();
         try self.consume(.Colon, "expect ':' for ternary else.");
@@ -191,8 +222,8 @@ fn parseBinary(self: *Self, prec: Precedence) ParseError!*Node {
     var node = try self.parsePrec(prec.next());
     while (Precedence.ofBin(self.next.tokenType).value() >= prec.value()) {
         self.advance();
-        var tokenType = self.current.tokenType;
-        var next = try self.parsePrec(prec.next());
+        const tokenType = self.current.tokenType;
+        const next = try self.parsePrec(prec.next());
         node = try self.createNode(Node.BinaryOpNode.init(node, tokenType, next));
     }
     return node;
@@ -202,15 +233,15 @@ fn parseUnary(self: *Self, prec: Precedence) ParseError!*Node {
     var node: ?*Node = null;
     if (self.next.tokenType.isUnary()) {
         self.advance();
-        var tokenType = self.current.tokenType;
-        var next = try self.parseUnary(prec);
+        const tokenType = self.current.tokenType;
+        const next = try self.parseUnary(prec);
         node = try self.createNode(Node.UnaryOpNode.init(tokenType, next));
     }
     return node orelse self.parsePrec(prec.next());
 }
 
 fn parseCall(self: *Self) ParseError!*Node {
-    var node = try self.parseVariable();
+    const node = try self.parseVariable();
     if (self.next.tokenType == .LeftParen) {
         var args = try self.parseTuple(.AllowEmpty, "arguments");
         return self.createNode(Node.FuncCallNode.init(node, args));
@@ -246,7 +277,7 @@ fn parseTuple(self: *Self, allow_empty: ParseTupleAllowEmpty, comptime tupleName
         return self.createNode(Node.TupleNode.init(self.ast.allocator));
     }
 
-    var group = try self.expression();
+    const group = try self.expression();
     if (self.next.tokenType == .Comma) {
         var tuple = try self.createNode(Node.TupleNode.init(self.ast.allocator));
         try self.appendNode(&tuple.Tuple.list, group);
@@ -259,6 +290,8 @@ fn parseTuple(self: *Self, allow_empty: ParseTupleAllowEmpty, comptime tupleName
     } else if (self.matchAdvance(.RightParen)) {
         return group;
     }
+
+    self.destroyNode(group);
     return self.errNode("expect ')' to terminate " ++ tupleName ++ ".");
 }
 
@@ -306,7 +339,9 @@ fn errNode(self: *Self, msg: []const u8) ParseError!*Node {
 
 fn synchronize(self: *Self) void {
     // current, to consume the semicolon aswell
-    while (self.current.tokenType != .Semicolon and self.current.tokenType != .EOF) self.advance();
+    while (self.current.tokenType != .Semicolon and self.current.tokenType != .EOF) {
+        self.advance();
+    }
 }
 
 // -------------------
@@ -319,4 +354,9 @@ fn createNode(self: *Self, node: Node) ParseError!*Node {
 
 fn appendNode(self: *Self, list: *Node.ListNode, node: *Node) ParseError!void {
     list.append(node) catch return ParseError.ArrayListAppend;
+}
+
+/// Careful, this will attempt to destroy all children nodes if set
+fn destroyNode(self: *Self, node: *Node) void {
+    node.destroy(self.ast.allocator);
 }

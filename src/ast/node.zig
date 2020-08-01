@@ -127,21 +127,21 @@ pub const TreeNode = union(enum) {
 
     pub const FuncCallNode = struct {
         callee: *TreeNode,
-        args: *TreeNode,
+        args: ?*TreeNode,
 
-        pub fn init(callee: *TreeNode, args: *TreeNode) Self {
+        pub fn init(callee: *TreeNode, args: ?*TreeNode) Self {
             return TreeNode{ .FuncCall = .{ .callee = callee, .args = args } };
         }
 
         pub fn print(self: *@This(), depth: usize) !void {
             try stdout.writeAll("\n");
             try self.callee.print(depth + 1);
-            try self.args.print(depth + 1);
+            if (self.args) |args| try args.print(depth + 1);
         }
 
         pub fn destroy(self: *@This(), allocator: *Allocator) void {
             self.callee.destroy(allocator);
-            self.args.destroy(allocator);
+            if (self.args) |args| args.destroy(allocator);
         }
     };
 

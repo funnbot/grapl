@@ -1,16 +1,27 @@
+// Variable Definition
+
+myVar = 1; // Semicolons required?....
+myVar1 = 2 + 3 + myVar; // standard c++ precedence
+!myMutVar = 23; // Default everything is constant, ! to mark mutable
+
+// Statically typed, all types are uppercase?
+
+// Optionally, place the type after variable, usually type will be inferred
+myTypedVar Int = 1;
+
+
 i Int = 10
 a Str = "hi"
 f Float = 1.2
 s UInt = 1;
-e UInt[32] = 12; 
-eat List[Int] = {1, 2, 3}
+e UInt(32) = 12; 
+eat List(Int) = {1, 2, 3}
 end Bool = true;
-
-
 // Tuples
 ee (Int, Float) = (10, 10.2)
-be (Int, Float) = (10 Int, 10.2 Float)
-beef = (10 Int, 10.2 Float)
+be (Int, Float) = (10, 10.2)
+
+beef = (10, 10.2)
 
 InsteadBool :: enum { DoIt, DontDoIt }
 
