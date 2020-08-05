@@ -17,6 +17,7 @@ const Token = Scanner.Token;
 const Self = @This();
 
 pub const ParseError = error{
+// Wrappings
     StdOutWrite,
     AstAlloc,
     ArrayListAppend,
@@ -61,10 +62,12 @@ pub fn parse(self: *Self, source: []const u8, parser_error_opt: ParserErrorOptio
     self.advance();
 
     while (self.next.tokenType != TokenType.EOF) {
-        try self.appendNode(&self.ast.stmts, try self.statement());
-        if (!self.matchAdvance(.Semicolon)) {
-            try self.err("Expect expression terminal.");
-        }
+        try self.appendList(&self.ast.stmts, try self.statement());
+        if (self.hasError) self.synchronize();
+    }
+
+    if (1 == 2) {
+        self.advance();
     }
 
     return self.ast;
@@ -72,15 +75,22 @@ pub fn parse(self: *Self, source: []const u8, parser_error_opt: ParserErrorOptio
 
 /// Statement does not return a value
 fn statement(self: *Self) ParseError!*Node {
+    var node: *Node = undefined;
+    errdefer self.destroyNode(node);
+
     if (self.matchAdvance(.Bang)) {
         try self.consume(.Identifier, "expect mutable variable name.");
-        return self.varDefineStmt(.Mutable);
+        node = try self.varDefineStmt(.Mutable);
     } else if (self.matchAdvance(.Identifier)) {
-        return self.varDefineStmt(.Constant);
+        node = try self.varDefineStmt(.Constant);
+    } else {
+        node = try self.expression();
     }
 
-    self.advance();
-    return self.errNode("unexpected statement.");
+    if (self.current.tokenType != .RightBrace)
+        try self.consume(.Semicolon, "expect ';' to terminate statement.");
+
+    return node;
 }
 
 const VarDefineStmtMutability = enum { Mutable, Constant };
@@ -132,15 +142,15 @@ fn parseTupleType(self: *Self) ParseError!*Node {
         return self.errNode("expect atleast two types within tuple type, found one.");
 
     var tupleNode = try self.createNode(Node.TupleNode.init(self.ast.allocator));
-    try self.appendNode(&tupleNode.Tuple.list, first);
+    try self.appendList(&tupleNode.Tuple.list, first);
 
     while (self.matchAdvance(.Comma)) {
         // Calling into expression parser for arbitrarily complex macro calls, scary
         const next = try self.parseType();
-        try self.appendNode(&tupleNode.Tuple.list, next);
+        try self.appendList(&tupleNode.Tuple.list, next);
     }
 
-    try self.consume(.RightParen, "expect ')' to terminate tuple.");
+    try self.consume(.RightParen, "expect ')' to terminate tuple type.");
 
     return tupleNode;
 }
@@ -162,6 +172,7 @@ const Precedence = enum {
     Unary,
     Accessor,
     Call,
+    Variable,
 
     pub fn next(self: Precedence) Precedence {
         return @intToEnum(Precedence, self.value() + 1);
@@ -196,13 +207,56 @@ fn parsePrec(self: *Self, prec: Precedence) ParseError!*Node {
         .Unary => self.parseUnary(prec),
         .Accessor => self.parseBinary(prec),
         .Call => self.parseCall(),
+        .Variable => self.parseVariable(),
 
         .None => self.errNode("expect expression."),
     };
 }
 
+fn parseElifAndElse(self: *Self) ParseError!?*Node {
+    if (self.matchAdvance(.Elif)) {
+        try self.consume(.LeftParen, "expect '(' before elif condition.");
+        const cond = try self.expression();
+        errdefer self.destroyNode(cond);
+
+        try self.consume(.RightParen, "expect ')' after elif condition");
+        const body = try self.expression();
+        errdefer self.destroyNode(body);
+
+        const inner = try self.parseElifAndElse();
+        errdefer if (inner) |i| self.destroyNode(i);
+
+        return self.createNode(Node.IfNode.init(cond, body, inner));
+    } else if (self.matchAdvance(.Else)) {
+        const body = try self.expression();
+        errdefer self.destroyNode(body);
+
+        return body;
+    }
+
+    return null;
+}
+
 fn parseFlow(self: *Self, prec: Precedence) ParseError!*Node {
-    if (self.matchAdvance(.If)) {}
+    if (self.matchAdvance(.Elif))
+        return self.errNode("floating elif statement.")
+    else if (self.matchAdvance(.Else))
+        return self.errNode("floating else statement.");
+
+    if (self.matchAdvance(.If)) {
+        try self.consume(.LeftParen, "expect '(' before if condition.");
+        const cond = try self.expression();
+        errdefer self.destroyNode(cond);
+        try self.consume(.RightParen, "expect ')' to terminate condition.");
+
+        const body = try self.expression();
+        errdefer self.destroyNode(body);
+
+        const chain = try self.parseElifAndElse();
+        errdefer if (chain) |c| self.destroyNode(c);
+
+        return try self.createNode(Node.IfNode.init(cond, body, chain));
+    }
     return self.parsePrec(prec.next());
 }
 
@@ -230,11 +284,22 @@ fn parseBinary(self: *Self, prec: Precedence) ParseError!*Node {
 }
 
 fn parseUnary(self: *Self, prec: Precedence) ParseError!*Node {
+    // // Is this really better than recursive?
     var node: ?*Node = null;
+    // var innerPtr: *?*Node = undefined;
+
+    // while (self.next.tokenType.isUnary()) {
+    //     self.advance();
+    //     const tokenType = self.current.tokenType;
+
+    // }
+
+    // return node orelse self.parsePrec(prec.next());
+
     if (self.next.tokenType.isUnary()) {
         self.advance();
         const tokenType = self.current.tokenType;
-        const next = try self.parseUnary(prec);
+        const next = try self.parsePrec(prec);
         node = try self.createNode(Node.UnaryOpNode.init(tokenType, next));
     }
     return node orelse self.parsePrec(prec.next());
@@ -242,6 +307,8 @@ fn parseUnary(self: *Self, prec: Precedence) ParseError!*Node {
 
 fn parseCall(self: *Self) ParseError!*Node {
     const node = try self.parseVariable();
+    errdefer self.destroyNode(node);
+
     if (self.next.tokenType == .LeftParen) {
         var args = try self.parseTuple(.AllowEmpty, "arguments");
         return self.createNode(Node.FuncCallNode.init(node, args));
@@ -260,9 +327,11 @@ fn parseVariable(self: *Self) ParseError!*Node {
     } else if (self.matchAdvance(.Identifier)) {
         var ident = self.current.chars;
         return self.createNode(Node.VariableNode.init(ident));
+    } else if (self.next.tokenType == .LeftBrace) {
+        return self.parseBlock();
     }
 
-    return self.errNode("expect factor.");
+    return self.errNode("expect variable.");
 }
 
 const ParseTupleAllowEmpty = enum { AllowEmpty, RequireValue };
@@ -278,21 +347,38 @@ fn parseTuple(self: *Self, allow_empty: ParseTupleAllowEmpty, comptime tupleName
     }
 
     const group = try self.expression();
+    errdefer self.destroyNode(group);
+
     if (self.next.tokenType == .Comma) {
         var tuple = try self.createNode(Node.TupleNode.init(self.ast.allocator));
-        try self.appendNode(&tuple.Tuple.list, group);
+        errdefer self.destroyNode(tuple);
+
+        try self.appendList(&tuple.Tuple.list, group);
 
         while (self.matchAdvance(.Comma))
-            try self.appendNode(&tuple.Tuple.list, try self.expression());
+            try self.appendList(&tuple.Tuple.list, try self.expression());
 
         try self.consume(.RightParen, "expect ')' to terminate " ++ tupleName ++ ".");
         return tuple;
-    } else if (self.matchAdvance(.RightParen)) {
-        return group;
     }
 
-    self.destroyNode(group);
-    return self.errNode("expect ')' to terminate " ++ tupleName ++ ".");
+    try self.consume(.RightParen, "expect ')' to terminate " ++ tupleName ++ ".");
+    return group;
+}
+
+fn parseBlock(self: *Self) ParseError!*Node {
+    try self.consume(.LeftBrace, "expect '{' to begin block.");
+    var block = try self.createNode(Node.BlockNode.init(self.ast.allocator));
+    errdefer self.destroyNode(block);
+
+    while (self.next.tokenType != .RightBrace) {
+        try self.appendList(&block.Block.list, try self.statement());
+        if (self.hasError) self.synchronize();
+    }
+
+    try self.consume(.RightBrace, "expect '}' to terminate block.");
+
+    return block;
 }
 
 // ---------------
@@ -312,8 +398,9 @@ fn matchAdvance(self: *Self, expect: TokenType) bool {
 }
 
 /// Expect a specific token, error if not
-fn consume(self: *Self, expect: TokenType, msg: []const u8) !void {
-    if (!self.matchAdvance(expect)) try self.err(msg);
+fn consume(self: *Self, expect: TokenType, msg: []const u8) ParseError!void {
+    if (!self.matchAdvance(expect))
+        try self.errFmt("expected token '{}', found '{}'.", .{expect.toChars(), self.next.tokenType.toChars()});
 }
 
 // --------------
@@ -321,15 +408,29 @@ fn consume(self: *Self, expect: TokenType, msg: []const u8) !void {
 // --------------
 
 fn err(self: *Self, msg: []const u8) ParseError!void {
+    return self.errFmt("{}", .{msg});
+}
+
+fn errFmt(self: *Self, comptime fmt: []const u8, args: anytype) ParseError!void {
+    if (self.hasError) return;
     self.hasError = true;
-    if (self.parser_error_opt == .ShowErrors) {
-        if (self.path) |p| {
-            stderr.print("\u{001b}[1m./{}:{}:{}: ", .{ p, self.current.line, self.current.column }) catch return ParseError.StdOutWrite;
-        }
-        stderr.print("\u{001b}[31merror\u{001b}[0m: {}\n", .{msg}) catch return ParseError.StdOutWrite;
+
+    if (self.parser_error_opt != .ShowErrors) return;
+
+    if (self.path) |p| {
+        stderr.print("\u{001b}[1m./{}:{}:{}: ", .{ p, self.current.line, self.current.column }) catch return ParseError.StdOutWrite;
     }
 
-    self.synchronize();
+    stderr.print("\u{001b}[31merror\u{001b}[0m: " ++ fmt ++ "\n", args) catch return ParseError.StdOutWrite;
+
+    if (self.path != null) {
+        stderr.print("{}\n", .{self.current.lineSlice}) catch return ParseError.StdOutWrite;
+        var i: usize = 1;
+        while (i < self.current.column) : (i += 1)
+            stderr.writeAll(" ") catch return ParseError.StdOutWrite;
+
+        stderr.writeAll("\u{001b}[3m^\u{001b}[0m\n") catch return ParseError.StdOutWrite;
+    }
 }
 
 fn errNode(self: *Self, msg: []const u8) ParseError!*Node {
@@ -338,10 +439,17 @@ fn errNode(self: *Self, msg: []const u8) ParseError!*Node {
 }
 
 fn synchronize(self: *Self) void {
-    // current, to consume the semicolon aswell
-    while (self.current.tokenType != .Semicolon and self.current.tokenType != .EOF) {
+    while (true) {
+        if (self.next.tokenType == .EOF) return;
+        // current, to consume the semicolon aswell
+
         self.advance();
+
+        if ((self.current.tokenType == .Semicolon or self.next.tokenType == .LeftBrace) and
+            (self.next.tokenType != .Semicolon and self.next.tokenType != .RightBrace))
+            break;
     }
+    self.hasError = false;
 }
 
 // -------------------
@@ -352,7 +460,7 @@ fn createNode(self: *Self, node: Node) ParseError!*Node {
     return self.ast.createNode(node) catch return ParseError.AstAlloc;
 }
 
-fn appendNode(self: *Self, list: *Node.ListNode, node: *Node) ParseError!void {
+fn appendList(self: *Self, list: *Node.ListNode, node: *Node) ParseError!void {
     list.append(node) catch return ParseError.ArrayListAppend;
 }
 

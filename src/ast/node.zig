@@ -16,8 +16,10 @@ const Ident = []const u8;
 pub const TreeNode = union(enum) {
     // Statements
     VarDefine: VarDefineNode,
+    Block: BlockNode,
 
     // Expression
+    If: IfNode,
     Ternary: TernaryNode,
     BinaryOp: BinaryOpNode,
     UnaryOp: UnaryOpNode,
@@ -62,7 +64,43 @@ pub const TreeNode = union(enum) {
         }
     };
 
+    pub const BlockNode = struct {
+        list: ListNode,
+
+        pub fn init(allocator: *Allocator) Self {
+            return TreeNode{ .Block = .{ .list = ListNode.initSelf(allocator) } };
+        }
+        pub fn print(self: *@This(), depth: usize) !void {
+            try self.list.print(depth + 1);
+        }
+        pub fn destroy(self: *@This(), allocator: *Allocator) void {
+            self.list.destroy(allocator);
+        }
+    };
+
     // Expression Nodes
+    pub const IfNode = struct {
+        cond: *TreeNode,
+        body: *TreeNode,
+        /// IfNode for elif, Statement for else
+        elif: ?*TreeNode,
+
+        pub fn init(cond: *TreeNode, body: *TreeNode, elif: ?*TreeNode) Self {
+            return TreeNode{ .If = .{ .cond = cond, .body = body, .elif = elif } };
+        }
+        pub fn print(self: *@This(), depth: usize) !void {
+            try stdout.writeAll("\n");
+            try self.cond.print(depth + 1);
+            try self.body.print(depth + 1);
+            if (self.elif) |elif| try elif.print(depth + 1);
+        }
+        pub fn destroy(self: *@This(), allocator: *Allocator) void {
+            self.cond.destroy(allocator);
+            self.body.destroy(allocator);
+            if (self.elif) |elif| elif.destroy(allocator);
+        }
+    };
+
     pub const TernaryNode = struct {
         cond: *TreeNode,
         first: *TreeNode,
@@ -174,7 +212,7 @@ pub const TreeNode = union(enum) {
         list: ListNode,
 
         pub fn init(allocator: *Allocator) Self {
-            return Self{ .Tuple = .{ .list = ListNode.init(allocator).List } };
+            return Self{ .Tuple = .{ .list = ListNode.initSelf(allocator) } };
         }
 
         pub fn print(self: *@This(), depth: usize) !void {
@@ -204,7 +242,11 @@ pub const TreeNode = union(enum) {
         list: std.ArrayList(*TreeNode),
 
         pub fn init(allocator: *Allocator) Self {
-            return Self{ .List = .{ .list = std.ArrayList(*TreeNode).init(allocator) } };
+            return Self{ .List = initSelf(allocator) };
+        }
+
+        pub fn initSelf(allocator: *Allocator) ListNode {
+            return ListNode{ .list = std.ArrayList(*TreeNode).init(allocator) };
         }
 
         pub fn append(self: *@This(), item: *TreeNode) !void {

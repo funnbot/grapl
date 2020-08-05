@@ -89,11 +89,12 @@ pub const Token = struct {
     line: usize,
     column: usize,
 
+    lineSlice: []const u8,
+
     pub fn format(self: Token, comptime fmt: []const u8, opts: std.fmt.FormatOptions, out_stream: anytype) !void {
-        const chars = if (self.chars[0] == '\n') @as([]const u8, "\\n") else self.chars;
-        try out_stream.print("{: <12} {}", .{
+        try out_stream.print("{} {}", .{
             @tagName(self.tokenType),
-            chars,
+            self.chars,
         });
     }
 };
@@ -104,13 +105,18 @@ source: []const u8,
 start: usize = 0,
 current: usize = 0,
 
-line: usize = 1,
-column: usize = 1,
+line: usize = 0,
+column: usize = 0,
+lineSlice: []const u8,
 
 pub fn init(source: []const u8) Self {
-    return Self{
+    var self = Self{
         .source = source,
+        .lineSlice = source[0..1],
     };
+    self.lineSlice.len = 0;
+    self.nextLine();
+    return self;
 }
 
 pub fn next(self: *Self) Token {
@@ -313,8 +319,7 @@ fn skipWhitespace(self: *Self) void {
                 } else break;
             },
             '\n' => {
-                self.line += 1;
-                self.column = 0;
+                self.nextLine();
                 self.step();
             },
             else => break,
@@ -350,8 +355,18 @@ fn step(self: *Self) void {
 }
 
 fn nextLine(self: *Self) void {
-    self.column = 1;
+    self.column = 0;
     self.line += 1;
+
+    const offset: usize = if (self.line == 1) 0 else 1;
+    self.lineSlice.ptr += self.lineSlice.len + offset;
+
+    self.lineSlice.len = 0;
+    var i: usize = @ptrToInt(self.lineSlice.ptr) - @ptrToInt(self.source.ptr);
+    while (i < self.source.len and self.source[i] != '\n') {
+        i += 1;
+        self.lineSlice.len += 1;
+    }
 }
 
 fn peek(self: *Self, count: usize) u8 {
@@ -386,6 +401,7 @@ fn errorToken(self: *Self, msg: []const u8) Token {
         .chars = msg,
         .line = self.line,
         .column = self.column - 1,
+        .lineSlice = "",
     };
 }
 
@@ -397,6 +413,7 @@ fn makeToken(self: *Self, tokenType: TokenType) Token {
         .chars = chars,
         .line = self.line,
         .column = self.column - chars.len,
+        .lineSlice = self.lineSlice,
     };
 }
 

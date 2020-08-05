@@ -43,6 +43,7 @@ fn arrayListWrite(context: *std.ArrayList(u8), bytes: []const u8) ArrayListWrite
     context.appendSlice(bytes) catch return error.ArrayListWriteError;
     return bytes.len;
 }
+
 const ArrayListWriter = std.io.Writer(*std.ArrayList(u8), ArrayListWriteError, arrayListWrite);
 fn nodeToSource(list: *ArrayListWriter, treeNode: *TreeNode) anyerror!void {
     switch (treeNode.*) {
@@ -55,6 +56,15 @@ fn nodeToSource(list: *ArrayListWriter, treeNode: *TreeNode) anyerror!void {
             }
             try list.writeAll("= ");
             try nodeToSource(list, node.value);
+            try list.writeAll(";");
+        },
+        .Block => |*node| {
+            try list.writeAll("{\n");
+            for (node.list.list.items) |n, i| {
+                try nodeToSource(list, n);
+                if (i + 1 < node.list.size()) try list.writeAll(", ");
+            }
+            try list.writeAll("\n}");
         },
         .UnaryOp => |node| {
             try list.print("{}", .{node.op.toChars()});
@@ -109,7 +119,7 @@ pub fn toSource(self: *Self, allocator: *Allocator) ![]const u8 {
 
     for (self.stmts.list.items) |stmt| {
         try nodeToSource(&list, stmt);
-        try list.writeAll(";\n");
+        try list.writeAll("\n");
     }
 
     return buffer.toOwnedSlice();

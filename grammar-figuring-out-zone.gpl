@@ -9,6 +9,8 @@ myVar1 = 2 + 3 + myVar; // standard c++ precedence
 // Optionally, place the type after variable, usually type will be inferred
 myTypedVar Int = 1;
 
+i Int = { break 1; }
+
 
 i Int = 10
 a Str = "hi"
