@@ -4,8 +4,7 @@ const assert = std.debug.assert;
 const Allocator = std.mem.Allocator;
 const TypeInfo = std.builtin.TypeInfo;
 
-const ast_node = @import("ast/node.zig");
-pub const TreeNode = ast_node.TreeNode;
+pub const TreeNode = @import("ast/node.zig").TreeNode;
 
 const Self = @This();
 
@@ -44,10 +43,18 @@ fn arrayListWrite(context: *std.ArrayList(u8), bytes: []const u8) ArrayListWrite
     return bytes.len;
 }
 
+var sourceDepth: usize = 0;
 const ArrayListWriter = std.io.Writer(*std.ArrayList(u8), ArrayListWriteError, arrayListWrite);
+fn fillDepth(list: *ArrayListWriter) !void {
+    var depth: usize = 0;
+    while (depth < sourceDepth) : (depth += 1)
+        try list.writeAll("  ");
+}
 fn nodeToSource(list: *ArrayListWriter, treeNode: *TreeNode) anyerror!void {
     switch (treeNode.*) {
         .VarDefine => |node| {
+            try fillDepth(list);
+            
             const mutText = if (node.mut) "!" else "";
             try list.print("{}{} ", .{ mutText, node.name });
             if (node.typename) |tName| {
@@ -60,11 +67,34 @@ fn nodeToSource(list: *ArrayListWriter, treeNode: *TreeNode) anyerror!void {
         },
         .Block => |*node| {
             try list.writeAll("{\n");
+            sourceDepth += 1;
             for (node.list.list.items) |n, i| {
                 try nodeToSource(list, n);
-                if (i + 1 < node.list.size()) try list.writeAll(", ");
+                try list.writeAll("\n");
             }
-            try list.writeAll("\n}");
+            sourceDepth -= 1;
+            try list.writeAll("}");
+        },
+        .If => |node| {
+            try list.writeAll("if (");
+            try nodeToSource(list, node.cond);
+            try list.writeAll(") ");
+            try nodeToSource(list, node.body);
+
+            var temp: ?*TreeNode = node.elif;
+            while (temp) |elif| {
+                if (elif.tagType() == .If) {
+                    try list.writeAll("elif (");
+                    try nodeToSource(list, elif.If.cond);
+                    try list.writeAll(") ");
+                    try nodeToSource(list, elif.If.body);
+                    temp = elif.If.elif;
+                } else {
+                    try list.writeAll(" else ");
+                    try nodeToSource(list, elif);
+                    temp = null;
+                }
+            }
         },
         .UnaryOp => |node| {
             try list.print("{}", .{node.op.toChars()});
@@ -122,5 +152,6 @@ pub fn toSource(self: *Self, allocator: *Allocator) ![]const u8 {
         try list.writeAll("\n");
     }
 
+    sourceDepth = 0;
     return buffer.toOwnedSlice();
 }

@@ -4,13 +4,14 @@ const stderr = std.io.getStdErr().writer();
 const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 const warn = std.debug.warn;
+const ansi = @import("ansi.zig");
 
-const Ast = @import("ast.zig");
+const Ast = @import("Ast.zig");
 const Node = Ast.TreeNode;
 
 const Stack = @import("stack.zig").Stack;
 
-const Scanner = @import("scanner.zig");
+const Scanner = @import("Scanner.zig");
 const TokenType = Scanner.TokenType;
 const Token = Scanner.Token;
 
@@ -417,11 +418,14 @@ fn errFmt(self: *Self, comptime fmt: []const u8, args: anytype) ParseError!void 
 
     if (self.parser_error_opt != .ShowErrors) return;
 
+    const bold = ansi.attr(ansi.AT.Bold);
+    const redBold = ansi.multi(.{ ansi.red, bold });
+
     if (self.path) |p| {
-        stderr.print("\u{001b}[1m./{}:{}:{}: ", .{ p, self.current.line, self.current.column }) catch return ParseError.StdOutWrite;
+        stderr.print(comptime bold("./{}:{}:{}: "), .{ p, self.current.line, self.current.column }) catch return ParseError.StdOutWrite;
     }
 
-    stderr.print("\u{001b}[31merror\u{001b}[0m: " ++ fmt ++ "\n", args) catch return ParseError.StdOutWrite;
+    stderr.print(redBold("error: ") ++ bold(fmt) ++ "\n", args) catch return ParseError.StdOutWrite;
 
     if (self.path != null) {
         stderr.print("{}\n", .{self.current.lineSlice}) catch return ParseError.StdOutWrite;
@@ -429,7 +433,7 @@ fn errFmt(self: *Self, comptime fmt: []const u8, args: anytype) ParseError!void 
         while (i < self.current.column) : (i += 1)
             stderr.writeAll(" ") catch return ParseError.StdOutWrite;
 
-        stderr.writeAll("\u{001b}[3m^\u{001b}[0m\n") catch return ParseError.StdOutWrite;
+        stderr.writeAll(ansi.yellow("^") ++ "\n") catch return ParseError.StdOutWrite;
     }
 }
 
@@ -468,3 +472,7 @@ fn appendList(self: *Self, list: *Node.ListNode, node: *Node) ParseError!void {
 fn destroyNode(self: *Self, node: *Node) void {
     node.destroy(self.ast.allocator);
 }
+
+// -------
+// Testing
+// -------

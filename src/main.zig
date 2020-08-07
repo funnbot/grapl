@@ -2,8 +2,8 @@ const std = @import("std");
 const stdout = std.io.getStdOut().writer();
 const stderr = std.io.getStdErr().writer();
 
-const Scanner = @import("scanner.zig");
-const Parser = @import("parser.zig");
+const Scanner = @import("Scanner.zig");
+const Parser = @import("Parser.zig");
 const c_allocator = std.heap.c_allocator;
 
 var path: []const u8 = undefined;
@@ -12,6 +12,8 @@ const PRINT_SOURCE = false;
 const PRINT_SCANNER = false;
 const PRINT_AST = true;
 const PRINT_AST_TO_SOURCE = true;
+
+const ansi = @import("ansi.zig");
 
 pub fn main() !void {
     var args = try std.process.argsAlloc(c_allocator);
