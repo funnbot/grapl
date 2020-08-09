@@ -285,17 +285,7 @@ fn parseBinary(self: *Self, prec: Precedence) ParseError!*Node {
 }
 
 fn parseUnary(self: *Self, prec: Precedence) ParseError!*Node {
-    // // Is this really better than recursive?
     var node: ?*Node = null;
-    // var innerPtr: *?*Node = undefined;
-
-    // while (self.next.tokenType.isUnary()) {
-    //     self.advance();
-    //     const tokenType = self.current.tokenType;
-
-    // }
-
-    // return node orelse self.parsePrec(prec.next());
 
     if (self.next.tokenType.isUnary()) {
         self.advance();
@@ -372,7 +362,7 @@ fn parseBlock(self: *Self) ParseError!*Node {
     var block = try self.createNode(Node.BlockNode.init(self.ast.allocator));
     errdefer self.destroyNode(block);
 
-    while (self.next.tokenType != .RightBrace) {
+    while (self.next.tokenType != .RightBrace and self.next.tokenType != .EOF) {
         try self.appendList(&block.Block.list, try self.statement());
         if (self.hasError) self.synchronize();
     }
@@ -401,7 +391,7 @@ fn matchAdvance(self: *Self, expect: TokenType) bool {
 /// Expect a specific token, error if not
 fn consume(self: *Self, expect: TokenType, msg: []const u8) ParseError!void {
     if (!self.matchAdvance(expect))
-        try self.errFmt("expected token '{}', found '{}'.", .{expect.toChars(), self.next.tokenType.toChars()});
+        try self.errFmt("expected token '{}', found '{}'.", .{ expect.toChars(), self.next.tokenType.toChars() });
 }
 
 // --------------
@@ -430,7 +420,7 @@ fn errFmt(self: *Self, comptime fmt: []const u8, args: anytype) ParseError!void 
     if (self.path != null) {
         stderr.print("{}\n", .{self.current.lineSlice}) catch return ParseError.StdOutWrite;
         var i: usize = 1;
-        while (i < self.current.column) : (i += 1)
+        while (i < self.next.column) : (i += 1)
             stderr.writeAll(" ") catch return ParseError.StdOutWrite;
 
         stderr.writeAll(ansi.yellow("^") ++ "\n") catch return ParseError.StdOutWrite;
@@ -442,18 +432,20 @@ fn errNode(self: *Self, msg: []const u8) ParseError!*Node {
     return self.createNode(Node.ErrorNode.init(msg));
 }
 
+// Needs some work
 fn synchronize(self: *Self) void {
-    while (true) {
-        if (self.next.tokenType == .EOF) return;
-        // current, to consume the semicolon aswell
+    // while (true) {
+    //     if (self.next.tokenType == .EOF) return;
+    //     std.debug.print("Sync: {}\n", .{self.next.tokenType});
+    //     self.advance();
+        
+    //     if (self.current.tokenType == .Semicolon) break;
 
-        self.advance();
-
-        if ((self.current.tokenType == .Semicolon or self.next.tokenType == .LeftBrace) and
-            (self.next.tokenType != .Semicolon and self.next.tokenType != .RightBrace))
-            break;
-    }
-    self.hasError = false;
+    //     // if ((self.current.tokenType == .Semicolon or self.next.tokenType == .LeftBrace) and
+    //     //     (self.next.tokenType != .Semicolon and self.next.tokenType != .RightBrace))
+    //     //     break;
+    // }
+    // self.hasError = false;
 }
 
 // -------------------

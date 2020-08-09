@@ -84,7 +84,7 @@ fn nodeToSource(list: *ArrayListWriter, treeNode: *TreeNode) anyerror!void {
             var temp: ?*TreeNode = node.elif;
             while (temp) |elif| {
                 if (elif.tagType() == .If) {
-                    try list.writeAll("elif (");
+                    try list.writeAll(" elif (");
                     try nodeToSource(list, elif.If.cond);
                     try list.writeAll(") ");
                     try nodeToSource(list, elif.If.body);

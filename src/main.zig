@@ -4,7 +4,6 @@ const stderr = std.io.getStdErr().writer();
 
 const Scanner = @import("Scanner.zig");
 const Parser = @import("Parser.zig");
-const c_allocator = std.heap.c_allocator;
 
 var path: []const u8 = undefined;
 
@@ -16,21 +15,26 @@ const PRINT_AST_TO_SOURCE = true;
 const ansi = @import("ansi.zig");
 
 pub fn main() !void {
-    var args = try std.process.argsAlloc(c_allocator);
-    defer std.process.argsFree(c_allocator, args);
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    //var allocator = &gpa.allocator;
+    var allocator = std.heap.c_allocator;
+    defer std.debug.assert(!gpa.deinit());
+
+    var args = try std.process.argsAlloc(allocator);
+    defer std.process.argsFree(allocator, args);
 
     if (args.len != 2 or args[1].len == 0) {
         return stderr.writeAll("Usage: grapl [file]");
     }
 
     path = args[1];
-    var source = readFile(c_allocator, path) catch {
+    var source = readFile(allocator, path) catch {
         try stderr.print("Failed to open file: \"{}\"", .{path});
         return;
     };
-    defer c_allocator.free(source);
+    defer allocator.free(source);
 
-    try runFile(source);
+    try runFile(allocator, source);
 }
 
 const FileOpenError = error{FileOpenError};
@@ -38,7 +42,7 @@ fn readFile(allocator: *std.mem.Allocator, file: []const u8) FileOpenError![]con
     return std.fs.cwd().readFileAlloc(allocator, file, 1_000_000_000) catch return error.FileOpenError;
 }
 
-fn runFile(source: []const u8) !void {
+fn runFile(allocator: *std.mem.Allocator, source: []const u8) !void {
     if (PRINT_SOURCE) {
         std.debug.warn("Original Source: \n{}\n", .{source});
     }
@@ -53,7 +57,7 @@ fn runFile(source: []const u8) !void {
 
     if (PRINT_AST) {
         std.debug.warn("AST: \n", .{});
-        var parser = Parser.init(c_allocator);
+        var parser = Parser.init(allocator);
         var ast = try parser.parse(source, .ShowErrors, path);
         try ast.print();
         ast.destroy();
@@ -61,11 +65,11 @@ fn runFile(source: []const u8) !void {
 
     if (PRINT_AST_TO_SOURCE) {
         std.debug.warn("AST to Source: \n", .{});
-        var parser = Parser.init(c_allocator);
+        var parser = Parser.init(allocator);
         var ast = try parser.parse(source, .SuppressErrors, path);
-        var src = try ast.toSource(c_allocator);
+        var src = try ast.toSource(allocator);
         try stdout.writeAll(src);
         ast.destroy();
-        c_allocator.free(src);
+        allocator.free(src);
     }
 }

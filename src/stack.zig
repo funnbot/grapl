@@ -90,7 +90,7 @@ pub fn Stack(comptime T: type) type {
 }
 
 test "test stack" {
-    var stack = Stack(i32).init(std.heap.c_allocator);
+    var stack = Stack(i32).init(std.testing.allocator);
     defer stack.deinit();
 
     var i: i32 = 0;
