@@ -216,7 +216,7 @@ fn symbol(self: *Self, char: u8) ?TokenType {
         '{' => .LeftBrace, '}' => .RightBrace,
         '(' => .LeftParen, ')' => .RightParen,
 
-        ':' => if (self.matchAdvance(':')) TokenType.ColonColon else .Colon,
+        ':' => if (self.matchAdvance('=')) TokenType.ColonEqual else .Colon,
         ';' => .Semicolon,
         ',' => .Comma,
         '|' => .Bar,

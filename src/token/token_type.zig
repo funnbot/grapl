@@ -21,13 +21,19 @@ pub const TokenType = enum {
     LeftBracket, RightBracket,
     LeftBrace, RightBrace,
     LeftParen, RightParen,
-    Colon, ColonColon, Semicolon, Comma,
+    Colon, ColonEqual,
+    Semicolon, Comma,
     Bar, Ampersand, Bang, Question,
     Dot,
 
     Newline,
 
     Error, EOF,
+
+    pub fn isTypeBlock(self: TokenType) bool {
+        const s = @enumToInt(self);
+        return s >= @enumToInt(TokenType.Struct) and s <= @enumToInt(TokenType.Case);
+    }
 
     pub fn isConstant(self: TokenType) bool {
         const s = @enumToInt(self);
@@ -64,13 +70,15 @@ pub const TokenType = enum {
             .LeftBracket => "[", .RightBracket => "]",
             .LeftBrace => "{", .RightBrace => "}",
             .LeftParen => "(", .RightParen => ")",
-            .Colon => ":", .ColonColon => "::", .Semicolon => ";", .Comma => ",",
+            .Colon => ":", .ColonEqual => ":=",
+            .Semicolon => ";", .Comma => ",",
             .Bar => "|", .Ampersand => "&", .Bang => "!", .Question => "?",
             .Dot => ".",
 
             //.Newline,
 
             //.Error, .EOF,
+            
             else => @tagName(self),
         };
     }

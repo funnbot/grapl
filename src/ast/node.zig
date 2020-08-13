@@ -53,7 +53,7 @@ pub const TreeNode = union(enum) {
             return TreeNode{ .VarDefine = .{ .name = name, .typename = typename, .value = value, .mut = mut } };
         }
         pub fn print(self: *@This(), depth: usize) !void {
-            const mutText = if (self.mut) "mut" else "";
+            const mutText = if (self.mut) " mut" else "";
             try stdout.print("{} {}\n", .{ mutText, self.name });
             if (self.typename) |tName| try tName.print(depth + 1);
             try self.value.print(depth + 1);
@@ -79,6 +79,7 @@ pub const TreeNode = union(enum) {
     };
 
     // Expression Nodes
+
     pub const IfNode = struct {
         cond: *TreeNode,
         body: *TreeNode,

@@ -53,26 +53,27 @@ fn fillDepth(list: *ArrayListWriter) !void {
 fn nodeToSource(list: *ArrayListWriter, treeNode: *TreeNode) anyerror!void {
     switch (treeNode.*) {
         .VarDefine => |node| {
-            try fillDepth(list);
-            
             const mutText = if (node.mut) "!" else "";
-            try list.print("{}{} ", .{ mutText, node.name });
+            try list.print("{}{} ", .{ node.name, mutText });
             if (node.typename) |tName| {
                 try nodeToSource(list, tName);
                 try list.writeAll(" ");
             }
-            try list.writeAll("= ");
+            try list.writeAll(":= ");
             try nodeToSource(list, node.value);
             try list.writeAll(";");
         },
         .Block => |*node| {
+            try fillDepth(list);
             try list.writeAll("{\n");
             sourceDepth += 1;
             for (node.list.list.items) |n, i| {
+                try fillDepth(list);
                 try nodeToSource(list, n);
                 try list.writeAll("\n");
             }
             sourceDepth -= 1;
+            try fillDepth(list);
             try list.writeAll("}");
         },
         .If => |node| {

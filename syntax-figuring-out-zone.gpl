@@ -1,0 +1,105 @@
+// Variable Definition
+
+myVar = 1; // Semicolons required?....
+myVar1 = 2 + 3 + myVar; // standard c++ precedence
+!myMutVar = 23; // Default everything is constant, ! to mark mutable
+
+// Statically typed, all types are uppercase?
+
+// Optionally, place the type after variable, usually type will be inferred
+myTypedVar Int = 1;
+
+args! := 23;
+args! = 23;
+args! = 23;
+
+fn[x Int => Bool] {}// Int -> Bool
+fn[x Int, y Int => Bool] {}// (Int, Int) -> Bool
+
+fn[x Int => (Int, Bool)] {}// Int -> (Int, Bool)
+
+fn[Bool] {}// () -> Bool
+fn[=> Bool] {}// () -> Bool
+
+fn[isA Bool=>] {}// Bool -> Void
+fn[isB Bool =>] {}// Bool -> Void
+fn[isC Bool => Void] {}// Bool -> Void
+
+
+
+myOldTuple (Int, Float) = (1, .1);
+myNewTuple Tuple(Int, Float) = .{ 1, .1 };
+
+
+
+isPrime := fn[x Int => Bool] {
+    ran! Slice := range(0, x);
+    ran! ?Slice := range(0, x);
+
+    ran mut Opt(Slice) := [1, 2, 3];
+
+    ran = range(0, x - 1);
+    // Infered function type: fn[Bool=>]
+    while (cond) fn[e] {
+
+    }
+    for (rang) fn[e Int =>] {
+        if (x % e == 0) return true;
+    }
+    return x > 1;
+}
+
+std! := #use("std");
+std = 2;
+main := fn[] {
+    std.log("Hello, world!");
+}
+
+i Int := 10
+a Str := "hi"
+f Float := 1.2
+s UInt := 1;
+e UInt(32) := 12; 
+eat List(Int) := {1, 2, 3}
+end Bool := true;
+// Tuples
+ee (Int, Float) := (10, 10.2)
+be (Int, Float) := (10, 10.2)
+
+beef := (10, 10.2)
+
+InsteadBool := enum { DoIt, DontDoIt }
+
+// Comptime types, proto, so on, Rigid
+[ ]
+// Tuple, Comptime length/types, but runtime values, Fluid
+(a Int, b Float)
+// function call is just passing a tuple to the function
+func(a, b)
+
+// Bind a type to a name
+myFunc :: fn[a Int => Float, Int] {
+
+}
+// Assign a type instance (value) to a name
+myVar = 1;
+
+case[Int] { 0 => myFunc() }
+
+MyEnum = enum {
+
+}
+
+add = f[a Int, b Int => Int] {
+
+}
+
+case {
+    
+}
+
+// Keywords define blocks
+struct[Traits], enum, fn(Proto), case(input), macro(Proto), union
+
+// macro -> type reflection, text replacement, cool stuff, but not as crazy as C++, still just a function call
+// Macros can return types, macros are used for generics, memoized
