@@ -341,8 +341,7 @@ fn makeToken(self: *Self, tokenType: TokenType) Token {
 fn expectToken(comptime src: []const u8, expectType: TokenType) void {
     var scanner = Self.init(src);
     var token = scanner.next();
-    std.testing.expect(token != null);
-    std.testing.expect(token.?.tokenType == expectType);
+    std.testing.expect(token.tokenType == expectType);
     //std.debug.warn("{}\n", .{token.?});
 }
 
@@ -355,7 +354,7 @@ test "scanner keywords" {
     inline for (keywords) |key| {
         var scanner = Self.init(key);
         var token = scanner.next();
-        std.testing.expect(token != null and token.?.tokenType != TokenType.Identifier);
+        std.testing.expect(token.tokenType != TokenType.Identifier);
     }
 }
 

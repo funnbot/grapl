@@ -1,40 +1,40 @@
 const std = @import("std");
-const stdout = std.io.getStdOut().writer();
+var stdout = std.io.getStdOut().writer();
 const assert = std.debug.assert;
 const Allocator = std.mem.Allocator;
 const TypeInfo = std.builtin.TypeInfo;
 
-pub const TreeNode = @import("ast/node.zig").TreeNode;
+pub const tree = @import("ast/tree_node.zig");
+pub const Node = tree.Node;
 
 const Self = @This();
 
 allocator: *Allocator,
-stmts: TreeNode.ListNode,
+stmts: tree.NodeList,
 
 pub fn init(allocator: *Allocator) Self {
+    std.meta.refAllDecls(tree);
     return Self{
         .allocator = allocator,
-        .stmts = TreeNode.ListNode.init(allocator).List,
+        .stmts = tree.NodeList.init(),
     };
 }
 
-pub fn createNode(self: *Self, node: TreeNode) !*TreeNode {
-    var nodePtr = try self.allocator.create(TreeNode);
-    nodePtr.* = node;
-    return nodePtr;
+pub fn createNode(self: *Self, comptime tag: tree.Tag, init_args: anytype) !*Node {
+    return Node.create(self.allocator, tag, init_args);
 }
 
-pub fn appendStmt(self: *Self, node: *TreeNode) !void {
+pub fn appendStmt(self: *Self, node: *Node) !void {
     try self.stmts.append(node);
 }
 
 pub fn print(self: *Self) !void {
-    try TreeNode.printTree("RootNode List", 0, false);
-    try self.stmts.print(0);
+    try tree.printTree("RootNode List", 0, false, &stdout);
+    try self.stmts.print(0, &stdout);
 }
 
-pub fn destroy(self: *Self) void {
-    self.stmts.destroy(self.allocator);
+pub fn deinit(self: *Self) void {
+    self.stmts.deinit(self.allocator);
 }
 
 const ArrayListWriteError = error{ArrayListWriteError};
@@ -50,7 +50,7 @@ fn fillDepth(list: *ArrayListWriter) !void {
     while (depth < sourceDepth) : (depth += 1)
         try list.writeAll("  ");
 }
-fn nodeToSource(list: *ArrayListWriter, treeNode: *TreeNode) anyerror!void {
+fn nodeToSource(list: *ArrayListWriter, treeNode: *Node) anyerror!void {
     switch (treeNode.*) {
         .VarDefine => |node| {
             const mutText = if (node.mut) "!" else "";
@@ -82,7 +82,7 @@ fn nodeToSource(list: *ArrayListWriter, treeNode: *TreeNode) anyerror!void {
             try list.writeAll(") ");
             try nodeToSource(list, node.body);
 
-            var temp: ?*TreeNode = node.elif;
+            var temp: ?*Node = node.elif;
             while (temp) |elif| {
                 if (elif.tagType() == .If) {
                     try list.writeAll(" elif (");

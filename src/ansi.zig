@@ -157,7 +157,7 @@ pub fn color16(comptime color_code: []const u8, comptime mode: Color16Mode) EscF
     const Closure = struct {
         pub fn esc(comptime str: []const u8) comptime []const u8 {
             if (mode == .Bright) {
-                return escape(color_code ++ ";1m", Code.Mode) ++ str ++ reset;
+                return escape(color_code ++ ";1", Code.Mode) ++ str ++ reset;
             } else if (mode == .Normal) {
                 return escape(color_code, Code.Mode) ++ str ++ reset;
             }
