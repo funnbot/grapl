@@ -13,53 +13,62 @@ const TokenType = Scanner.TokenType;
 
 const ansi = @import("../ansi.zig");
 
+// const ArrayListWriteError = error{ArrayListWriteError};
+// fn arrayListWrite(context: *std.ArrayList(u8), bytes: []const u8) ArrayListWriteError!usize {
+//     context.appendSlice(bytes) catch return error.ArrayListWriteError;
+//     return bytes.len;
+// }
+
+// var sourceDepth: usize = 0;
+// const ArrayListWriter = std.io.Writer(*std.ArrayList(u8), ArrayListWriteError, arrayListWrite);
+
+/// pub fn destroy(node: *Node, allocator: *Allocator) void
 const DestroyFn = fn (self: *Node, allocator: *Allocator) void;
+/// pub fn print(node: *Node, depth: usize, out_stream: *FileWriter) anyerror!void
 const PrintFn = fn (self: *Node, depth: usize, out_stream: *FileWriter) anyerror!void;
 
-const Namespace = @This();
+const Node = @This();
 
 // Base
-pub const Node = struct {
-    tag: Tag,
+tag: Tag,
 
-    destroyFn: DestroyFn,
-    printFn: ?PrintFn,
+destroyFn: DestroyFn,
+printFn: ?PrintFn,
 
-    fn init(comptime tag: Tag) Node {
-        const T = tag.Type();
-        return Node{
-            .tag = tag, // trait.hasFn fails for some reason.
-            .destroyFn = if (@hasDecl(T, "destroy")) T.destroy else destroyDefault(T),
-            .printFn = if (@hasDecl(T, "print")) T.print else null,
-        };
-    }
+fn init(comptime tag: Tag) Node {
+    const T = tag.Type();
+    return Node{
+        .tag = tag, // trait.hasFn fails for some reason.
+        .destroyFn = if (@hasDecl(T, "destroy")) T.destroy else destroyDefault(T),
+        .printFn = if (@hasDecl(T, "print")) T.print else null,
+    };
+}
 
-    pub fn create(allocator: *Allocator, comptime tag: Tag, init_args: anytype) !*Node {
-        var node = try allocator.create(tag.Type());
-        node.* = init_args;
-        node.base = Node.init(tag);
-        return &node.base;
-    }
+pub fn create(allocator: *Allocator, comptime tag: Tag, init_args: anytype) !*Node {
+    var node = try allocator.create(tag.Type());
+    node.* = init_args;
+    node.base = Node.init(tag);
+    return &node.base;
+}
 
-    pub fn print(self: *Node, depth: usize, out_stream: anytype) anyerror!void {
-        const hasFn = self.printFn != null;
-        try printTree(@tagName(self.tag), depth, !hasFn, out_stream);
-        if (hasFn) try self.printFn.?(self, depth, out_stream);
-    }
+pub fn print(self: *Node, depth: usize, out_stream: anytype) anyerror!void {
+    const hasFn = self.printFn != null;
+    try printTree(@tagName(self.tag), depth, !hasFn, out_stream);
+    if (hasFn) try self.printFn.?(self, depth, out_stream);
+}
 
-    pub fn destroy(self: *Node, allocator: *Allocator) void {
-        self.destroyFn(self, allocator);
-    }
+pub fn destroy(self: *Node, allocator: *Allocator) void {
+    self.destroyFn(self, allocator);
+}
 
-    pub fn as(self: *Node, comptime tag: Tag) *(tag.Type()) {
-        assert(self.tag == tag);
-        return self.asType(tag.Type());
-    }
+pub fn as(self: *Node, comptime tag: Tag) *(tag.Type()) {
+    assert(self.tag == tag);
+    return self.asType(tag.Type());
+}
 
-    pub fn asType(self: *Node, comptime T: type) *T {
-        return @fieldParentPtr(T, "base", self);
-    }
-};
+pub fn asType(self: *Node, comptime T: type) *T {
+    return @fieldParentPtr(T, "base", self);
+}
 
 pub const Tag = enum {
     VarDefine,
@@ -75,13 +84,13 @@ pub const Tag = enum {
     Error,
 
     pub fn Type(comptime self: Tag) type {
-        inline for (meta.declarations(Namespace)) |decl| {
+        inline for (meta.declarations(Node)) |decl| {
             // All node structs will be:
             // public, of type Struct, have a base field of Node
             if (decl.is_pub and
                 @as(@TagType(TypeInfo.Declaration.Data), decl.data) == .Type and
                 @hasField(decl.data.Type, "base") and
-                meta.fieldInfo(decl.data.Type, "base").field_type == Node and
+                decl.name.len == @tagName(self).len and
                 std.mem.eql(u8, decl.name, @tagName(self)))
                 return decl.data.Type;
         }

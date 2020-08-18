@@ -7,7 +7,6 @@ const warn = std.debug.warn;
 const ansi = @import("ansi.zig");
 
 const Ast = @import("Ast.zig");
-const tree = Ast.tree;
 const Node = Ast.Node;
 
 const Stack = @import("stack.zig").Stack;
@@ -361,10 +360,9 @@ fn parseTuple(self: *Self, allow_empty: ParseTupleAllowEmpty) ParseError!*Node {
     // Generally func calls will allow empty, if one argument, still want a tuple.
     if (self.next.tokenType == .Comma or allow_empty == .AllowEmpty) {
         var node = try self.createNode(.Tuple, .{});
-        var tuple: *tree.Tuple = node.as(.Tuple);
-
         errdefer self.destroyNode(node);
-
+        var tuple: *Node.Tuple = node.as(.Tuple);
+        
         try self.appendList(&tuple.list, group);
 
         var infLoop: usize = 0;
@@ -386,9 +384,8 @@ fn parseTuple(self: *Self, allow_empty: ParseTupleAllowEmpty) ParseError!*Node {
 fn parseBlock(self: *Self) ParseError!*Node {
     try self.consume(.LeftBrace);
     var node = try self.createNode(.Block, .{});
-    var block = node.as(.Block);
-
     errdefer self.destroyNode(node);
+    var block = node.as(.Block);
 
     var infLoop: usize = 0;
     while (self.next.tokenType != .RightBrace and self.next.tokenType != .EOF) {
@@ -486,11 +483,11 @@ fn synchronize(self: *Self) void {
 // ParseError wrapping
 // -------------------s
 
-fn createNode(self: *Self, comptime tag: tree.Tag, init_args: anytype) ParseError!*Node {
+fn createNode(self: *Self, comptime tag: Node.Tag, init_args: anytype) ParseError!*Node {
     return self.ast.createNode(tag, init_args) catch return ParseError.AstAlloc;
 }
 
-fn appendList(self: *Self, list: *tree.NodeList, node: *Node) ParseError!void {
+fn appendList(self: *Self, list: *Node.NodeList, node: *Node) ParseError!void {
     list.append(self.ast.allocator, node) catch return ParseError.ArrayListAppend;
 }
 

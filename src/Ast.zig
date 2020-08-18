@@ -4,23 +4,24 @@ const assert = std.debug.assert;
 const Allocator = std.mem.Allocator;
 const TypeInfo = std.builtin.TypeInfo;
 
-pub const tree = @import("ast/tree_node.zig");
-pub const Node = tree.Node;
+pub const Node = @import("ast/Node.zig");
+const printAST = @import("ast/print.zig").printList;
+const renderAST = @import("ast/render.zig").renderList;
 
 const Self = @This();
 
 allocator: *Allocator,
-stmts: tree.NodeList,
+stmts: Node.NodeList,
 
 pub fn init(allocator: *Allocator) Self {
-    std.meta.refAllDecls(tree);
+    std.meta.refAllDecls(Node);
     return Self{
         .allocator = allocator,
-        .stmts = tree.NodeList.init(),
+        .stmts = Node.NodeList.init(),
     };
 }
 
-pub fn createNode(self: *Self, comptime tag: tree.Tag, init_args: anytype) !*Node {
+pub fn createNode(self: *Self, comptime tag: Node.Tag, init_args: anytype) !*Node {
     return Node.create(self.allocator, tag, init_args);
 }
 
@@ -29,8 +30,7 @@ pub fn appendStmt(self: *Self, node: *Node) !void {
 }
 
 pub fn print(self: *Self) !void {
-    try tree.printTree("RootNode List", 0, false, &stdout);
-    try self.stmts.print(0, &stdout);
+    try printAST(&self.stmts, 0, &stdout);
 }
 
 pub fn deinit(self: *Self) void {
