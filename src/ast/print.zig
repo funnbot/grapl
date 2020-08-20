@@ -1,15 +1,28 @@
 const ansi = @import("../ansi.zig");
 const Node = @import("Node.zig");
 
-const MAX_DEPTH = 10;
+const MAX_DEPTH = 20;
 
-pub fn printList(list: *Node.NodeList, depth: usize, out_stream: anytype) !void {
-    for (list.items.items) |item, i| {
+pub const Error = error {
+    DiskQuota,
+    FileTooBig,
+    InputOutput,
+    NoSpaceLeft,
+    AccessDenied,
+    BrokenPipe,
+    SystemResources,
+    OperationAborted,
+    WouldBlock,
+    Unexpected,
+};
+
+pub fn printList(list: *Node.List, depth: usize, out_stream: anytype) Error!void {
+    for (list.items()) |item, i| {
         try printNode(item, depth, (i + 1 == list.size()), out_stream);
     }
 }
 
-fn printNode(node: *Node, depth: usize, last: bool, out_stream: anytype) anyerror!void {
+fn printNode(node: *Node, depth: usize, last: bool, out_stream: anytype) Error!void {
     if (depth > MAX_DEPTH) return;
 
     try printTree(@tagName(node.tag), depth, last, out_stream);
@@ -20,6 +33,12 @@ fn printNode(node: *Node, depth: usize, last: bool, out_stream: anytype) anyerro
             try printNode(if_node.cond, depth + 1, false, out_stream);
             try printNode(if_node.body, depth + 1, if_node.elif == null, out_stream);
             if (if_node.elif) |elif| try printNode(elif, depth + 1, true, out_stream);
+        },
+        .While => {
+            const while_node = node.as(.While);
+            try out_stream.writeAll("\n");
+            try printNode(while_node.cond, depth + 1, false, out_stream);
+            try printNode(while_node.body, depth + 1, true, out_stream);
         },
         .VarDefine => {
             const define = node.as(.VarDefine);
@@ -76,55 +95,17 @@ fn printNode(node: *Node, depth: usize, last: bool, out_stream: anytype) anyerro
             const error_node = node.as(.Error);
             try out_stream.print(": {}", .{error_node.msg});
         },
-        // else => {
-        //     try out_stream.print("{}", .{@tagName(node.tag)});
-        // },
     }
 }
 
-pub fn printTree(name: []const u8, depth: usize, last: bool, out_stream: anytype) !void {
-    const grayBold = ansi.multi(.{ ansi.color16(ansi.FG.Red, .Bright), ansi.attr(ansi.AT.Bold) });
-
-    var range = Range.init(2, 3);
-    while (range.next()) |e| try out_stream.print("Hi: {}\n", .{e});
+pub fn printTree(name: []const u8, depth: usize, last: bool, out_stream: anytype) Error!void {
+    const treeStyle = ansi.multi(.{ ansi.color16(ansi.FG.Red, .Bright), ansi.attr(ansi.AT.Bold) });
+    const nodeStyle = ansi.multi(.{ ansi.color16(ansi.FG.Green, .Bright), ansi.attr(ansi.AT.Bold) });
 
     var d: usize = 0;
     while (d < depth) : (d += 1) {
-        try out_stream.writeAll(comptime grayBold("┊ "));
+        try out_stream.writeAll(comptime treeStyle("┊ "));
     }
-    if (last)
-        try out_stream.print(grayBold("┗╸") ++ "{}", .{name})
-    else
-        try out_stream.print(grayBold("┣╸") ++ "{}", .{name});
+    const pipe = if (last) "┗╸" else "┣╸";
+    try out_stream.print(treeStyle("{}") ++ nodeStyle("{}"), .{ pipe, name });
 }
-
-const Range = struct {
-    const Dir = enum(i2) { Inc = 1, Dec = -1 };
-
-    i: isize,
-
-    limit: isize,
-    dir: Dir,
-    stepAmount: isize = 1,
-
-    pub fn init(start: isize, end_exc: isize) Range {
-        return Range{
-            .i = start,
-            .limit = end_exc,
-            .dir = if (start <= end_exc) .Inc else .Dec,
-        };
-    }
-
-    pub fn next(self: *Range) ?isize {
-        const temp = self.i;
-        if (if (self.dir == .Inc) self.i >= self.limit else self.i <= self.limit)
-            return null;
-        self.i += self.stepAmount * @enumToInt(self.dir);
-        return temp;
-    }
-
-    pub fn step(self: *Range, stepAmount: isize) Range {
-        self.stepAmount = stepAmount;
-        return self.*;
-    }
-};

@@ -10,14 +10,14 @@ var path: []const u8 = undefined;
 const PRINT_SOURCE = false;
 const PRINT_SCANNER = false;
 const PRINT_AST = true;
-const PRINT_AST_TO_SOURCE = true;
+const PRINT_AST_TO_SOURCE = false;
 
 const ansi = @import("ansi.zig");
 
-pub fn main() !void {
+pub fn main() !void {    
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    //var allocator = &gpa.allocator;
-    var allocator = std.heap.c_allocator;
+    var allocator = &gpa.allocator;
+    //var allocator = std.heap.c_allocator;
     defer std.debug.assert(!gpa.deinit());
 
     var args = try std.process.argsAlloc(allocator);
@@ -63,13 +63,11 @@ fn runFile(allocator: *std.mem.Allocator, source: []const u8) !void {
         ast.deinit();
     }
 
-    // if (PRINT_AST_TO_SOURCE) {
-    //     std.debug.warn("AST to Source: \n", .{});
-    //     var parser = Parser.init(allocator);
-    //     var ast = try parser.parse(source, .SuppressErrors, path);
-    //     var src = try ast.toSource(allocator);
-    //     try stdout.writeAll(src);
-    //     ast.deinit();
-    //     allocator.free(src);
-    // }
+    if (PRINT_AST_TO_SOURCE) {
+        std.debug.warn("AST to Source: \n", .{});
+        var parser = Parser.init(allocator);
+        var ast = try parser.parse(source, .SuppressErrors, path);
+        try ast.render();
+        ast.deinit();
+    }
 }
