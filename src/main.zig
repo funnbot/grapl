@@ -8,7 +8,7 @@ const Parser = @import("Parser.zig");
 var path: []const u8 = undefined;
 
 const PRINT_SOURCE = false;
-const PRINT_SCANNER = true;
+const PRINT_SCANNER = false;
 const PRINT_AST = true;
 const PRINT_AST_TO_SOURCE = true;
 

@@ -3,7 +3,7 @@ const Node = @import("Node.zig");
 
 const MAX_DEPTH = 20;
 
-pub const Error = error {
+pub const Error = error{
     DiskQuota,
     FileTooBig,
     InputOutput,
@@ -44,13 +44,24 @@ fn printNode(node: *Node, depth: usize, last: bool, out_stream: anytype) Error!v
             const define = node.as(.VarDefine);
             const mutText = if (define.mut) " mut " else " ";
             try out_stream.print("{}{}\n", .{ mutText, define.name });
-            if (define.typename) |tn| try printNode(tn, depth + 1, false, out_stream);
+            if (define.type_) |tn| try printNode(tn, depth + 1, false, out_stream);
             try printNode(define.value, depth + 1, true, out_stream);
         },
         .Block => {
             const block = node.as(.Block);
             try out_stream.print(" ({})\n", .{block.list.items.len});
             try printList(&block.list, depth + 1, out_stream);
+        },
+        .Proto => {
+            const proto = node.as(.Proto);
+            try out_stream.writeAll("\n");
+            for (proto.args.items) |arg, i| {
+                const isLast = proto.return_type == null and
+                    i + 1 == proto.args.items.len;
+                try printNode(arg.type_, depth + 1, isLast, out_stream);
+            }
+            if (proto.return_type) |rt|
+                try printNode(rt, depth + 1, true, out_stream);
         },
         .Literal => {
             const literal = node.as(.Literal);
@@ -93,7 +104,7 @@ fn printNode(node: *Node, depth: usize, last: bool, out_stream: anytype) Error!v
         },
         .Error => {
             const error_node = node.as(.Error);
-            try out_stream.print(": {}", .{error_node.msg});
+            try out_stream.print(": {}\n", .{error_node.msg});
         },
     }
 }

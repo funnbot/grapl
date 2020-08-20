@@ -88,25 +88,20 @@ fn parseTypeOpt(self: *Self) ParseError!?*Node {
 fn parseType(self: *Self) ParseError!*Node {
     try self.consume(.Identifier);
     const typename = self.current.chars;
-    const node = try self.createNode(.Variable, .{ .name = typename });
-
-    if (self.next.tokenType == .LeftParen) {
-        const args = try self.parseTuple(.AllowEmpty);
-        return self.createNode(.FuncCall, .{ .callee = node, .args = args });
+    var node = try self.createNode(.Variable, .{ .name = typename });
+    while (self.next.tokenType == .LeftParen) {
+        const args = try self.parseGroup(.AllowEmpty);
+        node = try self.createNode(.FuncCall, .{ .callee = node, .args = args });
     }
     return node;
 }
 
 fn parseProto(self: *Self) ParseError!*Node {
-
-
-    while (self.next.tokenType == .Comma) {
-
-    }
+    while (self.next.tokenType == .Comma) {}
 }
 
 // -----------------
-// Expression parser
+// Precedence parser
 // -----------------
 
 /// Higher precedence value gets evaluated first
@@ -114,7 +109,6 @@ const Precedence = enum {
     None,
     Declaration,
     Assignment,
-    ControlFlow,
     Ternary,
     Equality,
     Comparison,
@@ -123,7 +117,7 @@ const Precedence = enum {
     Unary,
     Accessor,
     Call,
-    Variable,
+    Base,
 
     pub fn next(self: Precedence) Precedence {
         return @intToEnum(Precedence, self.value() + 1);
@@ -145,17 +139,16 @@ const Precedence = enum {
     }
 };
 
-fn parsePrec(self: *Self, prec: Precedence) ParseError!*Node {
+inline fn parsePrec(self: *Self, prec: Precedence) ParseError!*Node {
     return switch (prec) {
         .Declaration => self.parseDecl(prec),
         .Assignment => self.parseBinary(prec),
-        .ControlFlow => self.parseFlow(prec),
         .Ternary => self.parseTernary(prec),
         .Equality, .Comparison, .Term, .Factor => self.parseBinary(prec),
         .Unary => self.parseUnary(prec),
         .Accessor => self.parseBinary(prec),
         .Call => self.parseCall(),
-        .Variable => self.parseVariable(),
+        .Base => self.parseBase(),
 
         .None => self.errNode("unexpected expression."),
     };
@@ -174,7 +167,7 @@ fn statement(self: *Self) ParseError!*Node {
 const ExprAllowAssign = enum { AllowAssign, NoAssign };
 /// Expression returns a value
 fn expression(self: *Self, allow_assign: ExprAllowAssign) ParseError!*Node {
-    return self.parsePrec(if (allow_assign == .AllowAssign) .Assignment else .ControlFlow);
+    return self.parsePrec(if (allow_assign == .AllowAssign) .Assignment else .Ternary);
 }
 
 fn parseDecl(self: *Self, prec: Precedence) ParseError!*Node {
@@ -182,6 +175,7 @@ fn parseDecl(self: *Self, prec: Precedence) ParseError!*Node {
     if (node.tag == .Variable) {
         const name = node.as(.Variable).name;
         const is_mut = self.matchAdvance(.Bang);
+
         const typename = try self.parseTypeOpt();
         errdefer if (typename) |tn| self.destroyNode(tn);
 
@@ -202,81 +196,13 @@ fn parseDecl(self: *Self, prec: Precedence) ParseError!*Node {
 
         return self.createNode(.VarDefine, .{
             .name = name,
-            .typename = typename,
+            .type_ = typename,
             .value = value,
             .mut = is_mut,
         });
     }
 
     return node;
-}
-
-fn parseElifAndElse(self: *Self) ParseError!?*Node {
-    if (self.matchAdvance(.Elif)) {
-        try self.consume(.LeftParen);
-        const cond = try self.expression(.NoAssign);
-        errdefer self.destroyNode(cond);
-
-        try self.consume(.RightParen);
-        const body = try self.expression(.AllowAssign);
-        errdefer self.destroyNode(body);
-
-        const inner = try self.parseElifAndElse();
-        errdefer if (inner) |i| self.destroyNode(i);
-
-        return self.createNode(.If, .{
-            .cond = cond,
-            .body = body,
-            .elif = inner,
-        });
-    } else if (self.matchAdvance(.Else)) {
-        const body = try self.expression(.AllowAssign);
-        errdefer self.destroyNode(body);
-
-        return body;
-    }
-
-    return null;
-}
-
-fn parseFlow(self: *Self, prec: Precedence) ParseError!*Node {
-    if (self.matchAdvance(.Elif))
-        return self.errNode("floating elif statement.")
-    else if (self.matchAdvance(.Else))
-        return self.errNode("floating else statement.");
-
-    if (self.matchAdvance(.If)) {
-        try self.consume(.LeftParen);
-        const cond = try self.expression(.NoAssign);
-        errdefer self.destroyNode(cond);
-        try self.consume(.RightParen);
-
-        const body = try self.expression(.AllowAssign);
-        errdefer self.destroyNode(body);
-
-        const chain = try self.parseElifAndElse();
-        errdefer if (chain) |c| self.destroyNode(c);
-
-        return self.createNode(.If, .{
-            .cond = cond,
-            .body = body,
-            .elif = chain,
-        });
-    } else if (self.matchAdvance(.While)) {
-        try self.consume(.LeftParen);
-        const cond = try self.expression(.NoAssign);
-        errdefer self.destroyNode(cond);
-        try self.consume(.RightParen);
-
-        const body = try self.expression(.AllowAssign);
-        errdefer self.destroyNode(body);
-
-        return self.createNode(.While, .{
-            .cond = cond,
-            .body = body,
-        });
-    }
-    return self.parsePrec(prec.next());
 }
 
 fn parseTernary(self: *Self, prec: Precedence) ParseError!*Node {
@@ -323,41 +249,47 @@ fn parseUnary(self: *Self, prec: Precedence) ParseError!*Node {
 }
 
 fn parseCall(self: *Self) ParseError!*Node {
-    const node = try self.parseVariable();
+    const node = try self.parseBase();
     errdefer self.destroyNode(node);
 
     if (self.next.tokenType == .LeftParen) {
-        var args = try self.parseTuple(.AllowEmpty);
+        var args = try self.parseGroup(.AllowEmpty);
         return self.createNode(.FuncCall, .{ .callee = node, .args = args });
     }
 
     return node;
 }
 
-// TODO: rename something other can variable, what is the base term in an expression, includes variables groupings tuples?
-fn parseVariable(self: *Self) ParseError!*Node {
+// ----------------
+// Base expressions
+// ----------------
+
+fn parseBase(self: *Self) ParseError!*Node {
     if (self.next.tokenType.isConstant()) {
         self.advance();
         return self.createNode(.Literal, .{
             .chars = self.current.chars,
             .typename = self.current.tokenType,
         });
-    } else if (self.next.tokenType == .LeftParen) {
-        return self.parseTuple(.RequireValue);
-    } else if (self.matchAdvance(.Identifier)) {
-        return self.createNode(.Variable, .{ .name = self.current.chars });
-    } else if (self.next.tokenType == .LeftBrace) {
-        return self.parseBlock();
     } else if (self.next.tokenType.isTypeBlock()) {
+        self.advance();
         return self.parseTypeBlock();
     }
 
     self.advance();
-    return self.errNode("expect variable.");
+    return switch (self.current.tokenType) {
+        .LeftParen => self.parseGroup(.RequireValue),
+        .Identifier => self.createNode(.Variable, .{ .name = self.current.chars }),
+        .LeftBrace => self.parseBlock(),
+        .If => self.parseIf(),
+        .While => self.parseWhile(),
+        else => {
+            return self.errNode("expect variable");
+        },
+    };
 }
 
 fn parseTypeBlock(self: *Self) ParseError!*Node {
-    self.advance();
     switch (self.current.tokenType) {
         .Fn => {
             return self.createNode(.Variable, .{ .name = "fn" });
@@ -367,10 +299,7 @@ fn parseTypeBlock(self: *Self) ParseError!*Node {
 }
 
 const ParseTupleAllowEmpty = enum { AllowEmpty, RequireValue };
-fn parseTuple(self: *Self, allow_empty: ParseTupleAllowEmpty) ParseError!*Node {
-    assert(self.next.tokenType == .LeftParen);
-    self.advance();
-
+fn parseGroup(self: *Self, allow_empty: ParseTupleAllowEmpty) ParseError!*Node {
     if (self.matchAdvance(.RightParen)) {
         if (allow_empty == .RequireValue)
             return self.errNode("expect tuple to have atleast one value.");
@@ -406,7 +335,6 @@ fn parseTuple(self: *Self, allow_empty: ParseTupleAllowEmpty) ParseError!*Node {
 }
 
 fn parseBlock(self: *Self) ParseError!*Node {
-    try self.consume(.LeftBrace);
     var node = try self.createNode(.Block, .{});
     errdefer self.destroyNode(node);
     var block = node.as(.Block);
@@ -423,6 +351,68 @@ fn parseBlock(self: *Self) ParseError!*Node {
     try self.consume(.RightBrace);
 
     return node;
+}
+
+fn parseIf(self: *Self) ParseError!*Node {
+    try self.consume(.LeftParen);
+    const cond = try self.expression(.NoAssign);
+    errdefer self.destroyNode(cond);
+    try self.consume(.RightParen);
+
+    const body = try self.expression(.AllowAssign);
+    errdefer self.destroyNode(body);
+
+    const chain = try self.parseElifOrElse();
+    errdefer if (chain) |c| self.destroyNode(c);
+
+    return self.createNode(.If, .{
+        .cond = cond,
+        .body = body,
+        .elif = chain,
+    });
+}
+
+fn parseElifOrElse(self: *Self) ParseError!?*Node {
+    if (self.matchAdvance(.Elif)) {
+        try self.consume(.LeftParen);
+        const cond = try self.expression(.NoAssign);
+        errdefer self.destroyNode(cond);
+
+        try self.consume(.RightParen);
+        const body = try self.expression(.AllowAssign);
+        errdefer self.destroyNode(body);
+
+        const inner = try self.parseElifOrElse();
+        errdefer if (inner) |i| self.destroyNode(i);
+
+        return self.createNode(.If, .{
+            .cond = cond,
+            .body = body,
+            .elif = inner,
+        });
+    } else if (self.matchAdvance(.Else)) {
+        const body = try self.expression(.AllowAssign);
+        errdefer self.destroyNode(body);
+
+        return body;
+    }
+
+    return null;
+}
+
+fn parseWhile(self: *Self) ParseError!*Node {
+    try self.consume(.LeftParen);
+    const cond = try self.expression(.NoAssign);
+    errdefer self.destroyNode(cond);
+    try self.consume(.RightParen);
+
+    const body = try self.expression(.AllowAssign);
+    errdefer self.destroyNode(body);
+
+    return self.createNode(.While, .{
+        .cond = cond,
+        .body = body,
+    });
 }
 
 // ---------------

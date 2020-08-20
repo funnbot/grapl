@@ -13,12 +13,19 @@ pub fn destroyNode(ator: *Allocator, node: *Node) void {
     switch (node.tag) {
         .VarDefine => {
             const define = node.as(.VarDefine);
-            if (define.typename) |tn| destroyNode(ator, tn);
+            if (define.type_) |tn| destroyNode(ator, tn);
             destroyNode(ator, define.value);
         },
         .Block => {
             const block = node.as(.Block);
             destroyList(ator, &block.list);
+        },
+        .Proto => {
+            const proto = node.as(.Proto);
+            for (proto.args.items) |arg|
+                destroyNode(ator, arg.type_);
+            if (proto.return_type) |rt|
+                destroyNode(ator, rt);
         },
         .If => {
             const if_node = node.as(.If);

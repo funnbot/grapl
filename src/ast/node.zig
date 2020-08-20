@@ -21,7 +21,7 @@ tag: Tag,
 pub fn create(allocator: *Allocator, comptime tag: Tag, init_args: anytype) !*Node {
     var node = try allocator.create(tag.Type());
     node.* = init_args;
-    node.base = Node{.tag = tag};
+    node.base = Node{ .tag = tag };
     return &node.base;
 }
 
@@ -42,7 +42,6 @@ pub const Tag = enum {
     VarDefine,
     Block,
     Proto,
-    ProtoArg,
     If,
     While,
     Ternary,
@@ -87,18 +86,16 @@ pub const Block = struct {
 
 // Type Nodes
 
-
 // Types
 pub const Proto = struct {
-    base: Node = undefined,
-    args: List(ProtoArg) = List(ProtoArg){},
-    return_type: ?*Node,
-};
+    pub const Arg = struct {
+        name: ?Identifier,
+        type_: *Node,
+    };
 
-pub const ProtoArg = struct {
     base: Node = undefined,
-    name: ?Identifier,
-    typename: *Node,
+    args: List(Arg) = List(Arg){},
+    return_type: ?*Node,
 };
 
 // Expressions

@@ -35,8 +35,8 @@ pub fn render(comptime out_stream: anytype, list: *Node.NodeList) !void {
 
                     const mutText = if (define.mut) symbolStyle("!") else "";
                     try self.out.print(defineStyle("{}") ++ "{} ", .{ define.name, mutText });
-                    if (define.typename) |tn| {
-                        try self.renderNode(tn);
+                    if (define.type_) |t| {
+                        try self.renderNode(t);
                         try self.out.writeAll(" ");
                     }
                     try self.out.writeAll(":= ");
@@ -58,13 +58,17 @@ pub fn render(comptime out_stream: anytype, list: *Node.NodeList) !void {
                     try self.out.writeAll("}");
                 },
                 .Proto => {
-                    const proto = node.as(.Proto);
-                    for (proto.args) |arg, i| {
-                        self.renderNode(arg);
-                        if (i + 1 < proto.args.items.len) self.write(", ");
+                    const proto: *Node.Proto = node.as(.Proto);
+                    for (proto.args.items) |arg, i| {
+                        if (arg.name) |name| try self.write(name);
+                        try self.write(" ");
+                        try self.renderNode(arg.type_);
+                        if (i + 1 < proto.args.items.len) 
+                            try self.write(", ");
                     }
-                    self.write(" => ");
-                    self.renderNode(proto.return_type);
+                    try self.write(" => ");
+                    if (proto.return_type) |rt|    
+                        try self.renderNode(rt);
                 },
                 .If => {
                     const if_node = node.as(.If);
