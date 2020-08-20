@@ -12,13 +12,13 @@ const destroyAST = @import("ast/destroy.zig");
 const Self = @This();
 
 allocator: *Allocator,
-stmts: Node.List,
+stmts: Node.List(*Node),
 
 pub fn init(allocator: *Allocator) Self {
     std.meta.refAllDecls(Node);
     return Self{
         .allocator = allocator,
-        .stmts = Node.List.init(),
+        .stmts = Node.List(*Node){},
     };
 }
 

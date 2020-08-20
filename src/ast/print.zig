@@ -16,9 +16,9 @@ pub const Error = error {
     Unexpected,
 };
 
-pub fn printList(list: *Node.List, depth: usize, out_stream: anytype) Error!void {
-    for (list.items()) |item, i| {
-        try printNode(item, depth, (i + 1 == list.size()), out_stream);
+pub fn printList(list: *Node.List(*Node), depth: usize, out_stream: anytype) Error!void {
+    for (list.items) |item, i| {
+        try printNode(item, depth, (i + 1 == list.items.len), out_stream);
     }
 }
 
@@ -49,7 +49,7 @@ fn printNode(node: *Node, depth: usize, last: bool, out_stream: anytype) Error!v
         },
         .Block => {
             const block = node.as(.Block);
-            try out_stream.print(" ({})\n", .{block.list.size()});
+            try out_stream.print(" ({})\n", .{block.list.items.len});
             try printList(&block.list, depth + 1, out_stream);
         },
         .Literal => {
@@ -88,7 +88,7 @@ fn printNode(node: *Node, depth: usize, last: bool, out_stream: anytype) Error!v
         },
         .Tuple => {
             const tuple = node.as(.Tuple);
-            try out_stream.print(" ({})\n", .{tuple.list.size()});
+            try out_stream.print(" ({})\n", .{tuple.list.items.len});
             try printList(&tuple.list, depth + 1, out_stream);
         },
         .Error => {

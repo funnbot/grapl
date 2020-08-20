@@ -10,7 +10,7 @@ const keywordStyle = ansi.color(ansi.FG.Magenta);
 const symbolStyle = ansi.color(ansi.FG.White);
 const literalStyle = ansi.color(ansi.FG.Yellow);
 
-pub fn render(comptime out_stream: anytype, list: *Node.List) !void {
+pub fn render(comptime out_stream: anytype, list: *Node.NodeList) !void {
     const OutStream = @TypeOf(out_stream);
     const Render = struct {
         const Self = @This();
@@ -22,6 +22,10 @@ pub fn render(comptime out_stream: anytype, list: *Node.List) !void {
             var d: usize = 0;
             while (d < self.depth) : (d += 1)
                 try self.out.writeAll("  ");
+        }
+
+        inline fn write(self: *Self, msg: []const u8) !void {
+            return self.out.writeAll(msg);
         }
          
         fn renderNode(self: *Self, node: *Node) anyerror!void {
@@ -44,7 +48,7 @@ pub fn render(comptime out_stream: anytype, list: *Node.List) !void {
 
                     try self.out.writeAll("{\n");
                     self.depth += 1;
-                    for (block.list.items()) |item, i| {
+                    for (block.list.items) |item, i| {
                         try self.fillDepth();
                         try self.renderNode(item);
                         try self.out.writeAll("\n");
@@ -52,6 +56,15 @@ pub fn render(comptime out_stream: anytype, list: *Node.List) !void {
                     self.depth -= 1;
                     try self.fillDepth();
                     try self.out.writeAll("}");
+                },
+                .Proto => {
+                    const proto = node.as(.Proto);
+                    for (proto.args) |arg, i| {
+                        self.renderNode(arg);
+                        if (i + 1 < proto.args.items.len) self.write(", ");
+                    }
+                    self.write(" => ");
+                    self.renderNode(proto.return_type);
                 },
                 .If => {
                     const if_node = node.as(.If);
@@ -118,9 +131,9 @@ pub fn render(comptime out_stream: anytype, list: *Node.List) !void {
                     const tuple = node.as(.Tuple);
 
                     try self.out.writeAll("(");
-                    for (tuple.list.items()) |item, i| {
+                    for (tuple.list.items) |item, i| {
                         try self.renderNode(item);
-                        if (i + 1 < tuple.list.size())
+                        if (i + 1 < tuple.list.items.len)
                             try self.out.writeAll(", ");
                     }
                     try self.out.writeAll(")");
@@ -145,7 +158,7 @@ pub fn render(comptime out_stream: anytype, list: *Node.List) !void {
     };
 
     var self = Render{ .out = out_stream };
-    for (list.items()) |item| {
+    for (list.items) |item| {
         try self.renderNode(item);
         try self.out.writeAll("\n");
     }

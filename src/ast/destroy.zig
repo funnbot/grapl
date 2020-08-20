@@ -3,10 +3,10 @@ const Allocator = std.mem.Allocator;
 
 const Node = @import("Node.zig");
 
-pub fn destroyList(allocator: *Allocator, list: *Node.List) void {
-    for (list.items()) |item|
+pub fn destroyList(allocator: *Allocator, list: *Node.NodeList) void {
+    for (list.items) |item|
         destroyNode(allocator, item);
-    list.data.deinit(allocator);
+    list.deinit(allocator);
 }
 
 pub fn destroyNode(ator: *Allocator, node: *Node) void {

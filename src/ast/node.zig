@@ -41,6 +41,8 @@ pub fn is(self: *Node, comptime tag: Tag) bool {
 pub const Tag = enum {
     VarDefine,
     Block,
+    Proto,
+    ProtoArg,
     If,
     While,
     Ternary,
@@ -73,14 +75,30 @@ const Identifier = []const u8;
 pub const VarDefine = struct {
     base: Node = undefined,
     name: Identifier,
-    typename: ?*Node,
+    type_: ?*Node,
     value: *Node,
     mut: bool,
 };
 
 pub const Block = struct {
     base: Node = undefined,
-    list: List = List.init(),
+    list: NodeList = NodeList{},
+};
+
+// Type Nodes
+
+
+// Types
+pub const Proto = struct {
+    base: Node = undefined,
+    args: List(ProtoArg) = List(ProtoArg){},
+    return_type: ?*Node,
+};
+
+pub const ProtoArg = struct {
+    base: Node = undefined,
+    name: ?Identifier,
+    typename: *Node,
 };
 
 // Expressions
@@ -132,7 +150,7 @@ pub const Variable = struct {
 
 pub const Tuple = struct {
     base: Node = undefined,
-    list: List = List.init(),
+    list: NodeList = NodeList{},
 };
 
 pub const Literal = struct {
@@ -146,27 +164,8 @@ pub const Error = struct {
     msg: []const u8,
 };
 
-pub const List = struct {
-    data: std.ArrayListUnmanaged(*Node),
-
-    pub fn init() List {
-        return List{
-            .data = std.ArrayListUnmanaged(*Node){},
-        };
-    }
-
-    pub fn append(self: *List, allocator: *Allocator, node: *Node) !void {
-        return self.data.append(allocator, node);
-    }
-
-    pub fn items(self: *List) []*Node {
-        return self.data.items;
-    }
-
-    pub fn size(self: *const List) usize {
-        return self.data.items.len;
-    }
-};
+pub const List = std.ArrayListUnmanaged;
+pub const NodeList = List(*Node);
 
 test "why" {
     std.debug.print("\n", .{});

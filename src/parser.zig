@@ -97,6 +97,14 @@ fn parseType(self: *Self) ParseError!*Node {
     return node;
 }
 
+fn parseProto(self: *Self) ParseError!*Node {
+
+
+    while (self.next.tokenType == .Comma) {
+
+    }
+}
+
 // -----------------
 // Expression parser
 // -----------------
@@ -503,7 +511,7 @@ fn createNode(self: *Self, comptime tag: Node.Tag, init_args: anytype) ParseErro
     return self.ast.createNode(tag, init_args) catch return ParseError.AstAlloc;
 }
 
-fn appendList(self: *Self, list: *Node.List, node: *Node) ParseError!void {
+fn appendList(self: *Self, list: *Node.List(*Node), node: *Node) ParseError!void {
     list.append(self.ast.allocator, node) catch return ParseError.ArrayListAppend;
 }
 
