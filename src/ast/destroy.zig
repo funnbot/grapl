@@ -20,12 +20,10 @@ pub fn destroyNode(ator: *Allocator, node: *Node) void {
             const block = node.as(.Block);
             destroyList(ator, &block.list);
         },
-        .Proto => {
-            const proto = node.as(.Proto);
-            for (proto.args.items) |arg|
-                destroyNode(ator, arg.type_);
-            if (proto.return_type) |rt|
-                destroyNode(ator, rt);
+        .FnBlock => {
+            const fn_block = node.as(.FnBlock);
+            destroyProto(ator, &fn_block.proto);
+            destroyNode(ator, fn_block.body);
         },
         .If => {
             const if_node = node.as(.If);
@@ -65,4 +63,12 @@ pub fn destroyNode(ator: *Allocator, node: *Node) void {
         .Variable, .Literal, .Error => {},
     }
     ator.destroy(node);
+}
+
+fn destroyProto(ator: *Allocator, proto: *Node.Proto) void {
+    for (proto.args.items) |arg|
+        destroyNode(ator, arg.type_);
+    proto.args.deinit(ator);
+    if (proto.return_type) |rt|
+        destroyNode(ator, rt);
 }

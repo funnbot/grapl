@@ -52,16 +52,10 @@ fn printNode(node: *Node, depth: usize, last: bool, out_stream: anytype) Error!v
             try out_stream.print(" ({})\n", .{block.list.items.len});
             try printList(&block.list, depth + 1, out_stream);
         },
-        .Proto => {
-            const proto = node.as(.Proto);
-            try out_stream.writeAll("\n");
-            for (proto.args.items) |arg, i| {
-                const isLast = proto.return_type == null and
-                    i + 1 == proto.args.items.len;
-                try printNode(arg.type_, depth + 1, isLast, out_stream);
-            }
-            if (proto.return_type) |rt|
-                try printNode(rt, depth + 1, true, out_stream);
+        .FnBlock => {
+            const fn_block = node.as(.FnBlock);
+            try printProto(&fn_block.proto, depth + 1, out_stream);
+            try printNode(fn_block.body, depth + 1, false, out_stream);
         },
         .Literal => {
             const literal = node.as(.Literal);
@@ -119,4 +113,18 @@ pub fn printTree(name: []const u8, depth: usize, last: bool, out_stream: anytype
     }
     const pipe = if (last) "┗╸" else "┣╸";
     try out_stream.print(treeStyle("{}") ++ nodeStyle("{}"), .{ pipe, name });
+}
+
+fn printProto(proto: *Node.Proto, depth: usize, out_stream: anytype) Error!void {
+    try out_stream.writeAll("\n");
+    try printTree("Proto", depth, false, out_stream);
+    try out_stream.writeAll("\n");
+    
+    for (proto.args.items) |arg, i| {
+        const isLast = proto.return_type == null and
+            i + 1 == proto.args.items.len;
+        try printNode(arg.type_, depth + 1, isLast, out_stream);
+    }
+    if (proto.return_type) |rt|
+        try printNode(rt, depth + 1, true, out_stream);
 }

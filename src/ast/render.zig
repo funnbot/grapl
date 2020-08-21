@@ -27,7 +27,7 @@ pub fn render(comptime out_stream: anytype, list: *Node.NodeList) !void {
         inline fn write(self: *Self, msg: []const u8) !void {
             return self.out.writeAll(msg);
         }
-         
+
         fn renderNode(self: *Self, node: *Node) anyerror!void {
             switch (node.tag) {
                 .VarDefine => {
@@ -57,18 +57,12 @@ pub fn render(comptime out_stream: anytype, list: *Node.NodeList) !void {
                     try self.fillDepth();
                     try self.out.writeAll("}");
                 },
-                .Proto => {
-                    const proto: *Node.Proto = node.as(.Proto);
-                    for (proto.args.items) |arg, i| {
-                        if (arg.name) |name| try self.write(name);
-                        try self.write(" ");
-                        try self.renderNode(arg.type_);
-                        if (i + 1 < proto.args.items.len) 
-                            try self.write(", ");
-                    }
-                    try self.write(" => ");
-                    if (proto.return_type) |rt|    
-                        try self.renderNode(rt);
+                .FnBlock => {
+                    const fn_block = node.as(.FnBlock);
+                    try self.write(keywordStyle("fn") ++ " [");
+                    try self.renderProto(&fn_block.proto);
+                    try self.write("] ");
+                    try self.renderNode(fn_block.body);
                 },
                 .If => {
                     const if_node = node.as(.If);
@@ -158,6 +152,20 @@ pub fn render(comptime out_stream: anytype, list: *Node.NodeList) !void {
                 },
                 .Error => try self.out.print("\u{001b}[31m!{}!\u{001b}[0m", .{node.as(.Error).msg}),
             }
+        }
+
+        fn renderProto(self: *Self, proto: *Node.Proto) anyerror!void {
+            for (proto.args.items) |arg, i| {
+                if (arg.name) |name| try self.out.print(comptime varStyle("{}"), .{name});
+                try self.write(" ");
+                try self.renderNode(arg.type_);
+                if (i + 1 < proto.args.items.len)
+                    try self.write(", ");
+            }
+            if (proto.args.items.len > 0 or proto.return_type != null)
+                try self.write(" => ");
+            if (proto.return_type) |rt|
+                try self.renderNode(rt);
         }
     };
 

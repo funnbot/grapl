@@ -41,7 +41,7 @@ pub fn is(self: *Node, comptime tag: Tag) bool {
 pub const Tag = enum {
     VarDefine,
     Block,
-    Proto,
+    FnBlock,
     If,
     While,
     Ternary,
@@ -68,7 +68,17 @@ pub const Tag = enum {
     }
 };
 
-const Identifier = []const u8;
+pub const Identifier = []const u8;
+
+pub const Proto = struct {
+    pub const Arg = struct {
+        name: ?Identifier,
+        type_: *Node,
+    };
+
+    args: List(Arg) = List(Arg){},
+    return_type: ?*Node,
+};
 
 // Statements
 pub const VarDefine = struct {
@@ -86,16 +96,10 @@ pub const Block = struct {
 
 // Type Nodes
 
-// Types
-pub const Proto = struct {
-    pub const Arg = struct {
-        name: ?Identifier,
-        type_: *Node,
-    };
-
+pub const FnBlock = struct {
     base: Node = undefined,
-    args: List(Arg) = List(Arg){},
-    return_type: ?*Node,
+    proto: Proto,
+    body: *Node,
 };
 
 // Expressions

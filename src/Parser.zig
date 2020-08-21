@@ -79,25 +79,46 @@ pub fn parse(self: *Self, source: []const u8, parser_error_opt: ParserErrorOptio
 // -----------
 
 fn parseTypeOpt(self: *Self) ParseError!?*Node {
-    return if (self.next.tokenType == .Identifier)
-        self.parseType()
-    else
-        null;
+    return if (self.next.tokenType == .Identifier) {
+        self.advance();
+        return self.parseType();
+    } else null;
 }
 
 fn parseType(self: *Self) ParseError!*Node {
-    try self.consume(.Identifier);
+    try self.ensure(.Identifier);
+
     const typename = self.current.chars;
     var node = try self.createNode(.Variable, .{ .name = typename });
-    while (self.next.tokenType == .LeftParen) {
+    while (self.matchAdvance(.LeftParen)) {
         const args = try self.parseGroup(.AllowEmpty);
         node = try self.createNode(.FuncCall, .{ .callee = node, .args = args });
     }
     return node;
 }
 
-fn parseProto(self: *Self) ParseError!*Node {
-    while (self.next.tokenType == .Comma) {}
+fn parseProto(self: *Self) ParseError!Node.Proto {
+    var args = Node.List(Node.Proto.Arg){};
+    if (self.next.tokenType == .RightBracket)
+        return Node.Proto{ .args = args, .return_type = null };
+
+    if (self.next.tokenType != .Arrow) {
+        while (true) {
+            try self.consume(.Identifier);
+            var name: ?Node.Identifier = null;
+            if (self.next.tokenType == .Identifier) {
+                name = self.current.chars;
+                self.advance();
+            }
+            const type_ = try self.parseType();
+
+            try self.append(Node.Proto.Arg, &args, .{ .name = name, .type_ = type_ });
+            if (!self.matchAdvance(.Comma)) break;
+        }
+    }
+    try self.consume(.Arrow);
+    const type_ = try self.parseTypeOpt();
+    return Node.Proto{ .args = args, .return_type = type_ };
 }
 
 // -----------------
@@ -173,6 +194,8 @@ fn expression(self: *Self, allow_assign: ExprAllowAssign) ParseError!*Node {
 fn parseDecl(self: *Self, prec: Precedence) ParseError!*Node {
     var node = try self.parsePrec(prec.next());
     if (node.tag == .Variable) {
+        // Essentially the path for every variable at decl level, (ie assign = 2)
+        // Parse variable, pass if ^, fail match !, fail match next Identifier, fail match :=, return
         const name = node.as(.Variable).name;
         const is_mut = self.matchAdvance(.Bang);
 
@@ -265,34 +288,34 @@ fn parseCall(self: *Self) ParseError!*Node {
 // ----------------
 
 fn parseBase(self: *Self) ParseError!*Node {
-    if (self.next.tokenType.isConstant()) {
-        self.advance();
+    self.advance();
+    if (self.current.tokenType.isConstant()) {
         return self.createNode(.Literal, .{
             .chars = self.current.chars,
             .typename = self.current.tokenType,
         });
-    } else if (self.next.tokenType.isTypeBlock()) {
-        self.advance();
+    } else if (self.current.tokenType.isTypeBlock()) {
         return self.parseTypeBlock();
     }
 
-    self.advance();
     return switch (self.current.tokenType) {
         .LeftParen => self.parseGroup(.RequireValue),
         .Identifier => self.createNode(.Variable, .{ .name = self.current.chars }),
         .LeftBrace => self.parseBlock(),
         .If => self.parseIf(),
         .While => self.parseWhile(),
-        else => {
-            return self.errNode("expect variable");
-        },
+        else => self.errNode("expect variable"),
     };
 }
 
 fn parseTypeBlock(self: *Self) ParseError!*Node {
     switch (self.current.tokenType) {
         .Fn => {
-            return self.createNode(.Variable, .{ .name = "fn" });
+            try self.consume(.LeftBracket);
+            const proto = try self.parseProto();
+            try self.consume(.RightBracket);
+            const body = try self.expression(.AllowAssign);
+            return self.createNode(.FnBlock, .{ .proto = proto, .body = body });
         },
         else => unreachable,
     }
@@ -315,7 +338,6 @@ fn parseGroup(self: *Self, allow_empty: ParseTupleAllowEmpty) ParseError!*Node {
         var node = try self.createNode(.Tuple, .{});
         errdefer self.destroyNode(node);
         var tuple: *Node.Tuple = node.as(.Tuple);
-
         try self.appendList(&tuple.list, group);
 
         var infLoop: usize = 0;
@@ -325,7 +347,6 @@ fn parseGroup(self: *Self, allow_empty: ParseTupleAllowEmpty) ParseError!*Node {
             infLoop += 1;
             assert(infLoop < INF_LOOP);
         }
-
         try self.consume(.RightParen);
         return node;
     }
@@ -420,6 +441,7 @@ fn parseWhile(self: *Self) ParseError!*Node {
 // ---------------
 
 fn advance(self: *Self) void {
+    //std.debug.print("Next: {}\n", .{self.next.tokenType});
     self.current = self.next;
     self.next = self.scanner.next();
 }
@@ -435,6 +457,16 @@ fn matchAdvance(self: *Self, expect: TokenType) bool {
 fn consume(self: *Self, expect: TokenType) ParseError!void {
     if (!self.matchAdvance(expect))
         try self.errFmt("expected token '{}', found '{}'.", .{ expect.toChars(), self.next.tokenType.toChars() });
+}
+
+fn ensure(self: *Self, expect: TokenType) ParseError!void {
+    if (self.current.tokenType != expect)
+        try self.errFmt("expected token '{}'.", .{expect.toChars()});
+}
+
+fn unexpect(self: *Self, unexpected: TokenType) ParseError!void {
+    if (self.next.tokenType == unexpected)
+        try self.errFmt("unexpected token `{}`", .{unexpected.toChars()});
 }
 
 // --------------
@@ -503,6 +535,10 @@ fn createNode(self: *Self, comptime tag: Node.Tag, init_args: anytype) ParseErro
 
 fn appendList(self: *Self, list: *Node.List(*Node), node: *Node) ParseError!void {
     list.append(self.ast.allocator, node) catch return ParseError.ArrayListAppend;
+}
+
+fn append(self: *Self, comptime T: type, list: *Node.List(T), item: T) ParseError!void {
+    list.append(self.ast.allocator, item) catch return ParseError.ArrayListAppend;
 }
 
 /// Careful, this will attempt to destroy all children nodes if set

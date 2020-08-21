@@ -15,7 +15,7 @@ const PRINT_AST_TO_SOURCE = true;
 const ansi = @import("ansi.zig");
 
 pub fn main() !void {    
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.GeneralPurposeAllocator(.{.stack_trace_frames = 8}){};
     var allocator = &gpa.allocator;
     //var allocator = std.heap.c_allocator;
     defer std.debug.assert(!gpa.deinit());
