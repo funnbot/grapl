@@ -23,7 +23,7 @@ pub fn destroyNode(ator: *Allocator, node: *Node) void {
         .FnBlock => {
             const fn_block = node.as(.FnBlock);
             destroyProto(ator, &fn_block.proto);
-            destroyNode(ator, fn_block.body);
+            if (fn_block.body) |body| destroyNode(ator, body);
         },
         .If => {
             const if_node = node.as(.If);

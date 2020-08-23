@@ -61,8 +61,11 @@ pub fn render(comptime out_stream: anytype, list: *Node.NodeList) !void {
                     const fn_block = node.as(.FnBlock);
                     try self.write(keywordStyle("fn") ++ " [");
                     try self.renderProto(&fn_block.proto);
-                    try self.write("] ");
-                    try self.renderNode(fn_block.body);
+                    try self.write("]");
+                    if (fn_block.body) |body| {
+                        try self.write(" ");
+                        try self.renderNode(body);
+                    }
                 },
                 .If => {
                     const if_node = node.as(.If);
@@ -162,7 +165,7 @@ pub fn render(comptime out_stream: anytype, list: *Node.NodeList) !void {
                 if (i + 1 < proto.args.items.len)
                     try self.write(", ");
             }
-            if (proto.args.items.len > 0 or proto.return_type != null)
+            if (proto.args.items.len > 0)
                 try self.write(" => ");
             if (proto.return_type) |rt|
                 try self.renderNode(rt);

@@ -24,15 +24,20 @@ pub fn main() !void {
     defer std.process.argsFree(allocator, args);
 
     if (args.len != 2 or args[1].len == 0) {
-        return stderr.writeAll("Usage: grapl [file]");
+        return stderr.writeAll("Usage: grapl [file]\n");
     }
 
     path = args[1];
     var source = readFile(allocator, path) catch {
-        try stderr.print("Failed to open file: \"{}\"", .{path});
+        try stderr.print("Failed to open file: \"{}\"\n", .{path});
         return;
     };
     defer allocator.free(source);
+
+    if (source.len == 0) {
+        try stderr.print("Empty source file: \"{}\"\n", .{path});
+        return;
+    }
 
     try runFile(allocator, source);
 }

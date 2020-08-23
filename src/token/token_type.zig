@@ -44,6 +44,15 @@ pub const TokenType = enum {
         return self == .Plus or self == .Minus or self == .Bang;
     }
 
+    pub fn isTerminal(self: TokenType) bool {
+        return switch (self) {
+            .Semicolon, .Comma,
+            .RightBrace, .RightParen, .RightBracket,
+            => true,
+            else => false,
+        };
+    }
+
     pub fn toChars(self: TokenType) []const u8 {
         return switch (self) {
             // Keywords

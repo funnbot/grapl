@@ -55,12 +55,12 @@ main := fn[] {
     std.log("Hello, world!");
 }
 
-i Int := 10
-a Str := "hi"
-f Float := 1.2
+i Int := 10;
+a Str := "hi";
+f Float := 1.2;
 s UInt := 1;
 e UInt(32) := 12; 
-eat List(Int) := {1, 2, 3}
+eat List(Int) := {1, 2, 3}; 
 end Bool := true;
 // Tuples
 ee (Int, Float) := (10, 10.2)
@@ -103,3 +103,33 @@ struct[Traits], enum, fn(Proto), case(input), macro(Proto), union
 
 // macro -> type reflection, text replacement, cool stuff, but not as crazy as C++, still just a function call
 // Macros can return types, macros are used for generics, memoized
+
+myTuple Tuple(Int, Float) := if (true) (10, 2.1) else (11, 2.3);
+result Int := (as == 2);
+res + 1;
+
+asd := 1 + if(true) 2;
+
+result := fn[a Int, b Float => Tuple(Int, Float)] {
+    x = x + 1;
+}
+
+if (true) var;
+
+if (i == 2) {
+    result = 20;
+    result = 30;
+} elif (i == 3) {
+    result := 30;
+} else {
+    sult! := 40;
+    if (true) {
+        test = 2 + 1;
+        if (false) {
+            test = 2 + 1;
+        }
+    }
+}
+
+result! := 20;
+

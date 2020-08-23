@@ -116,6 +116,14 @@ fn parseProto(self: *Self) ParseError!Node.Proto {
             if (!self.matchAdvance(.Comma)) break;
         }
     }
+    // Special case for fn [Int] being: Int is the return type
+    if (args.items.len == 1 and self.next.tokenType != .Arrow) {
+        const type_ = args.items[0].type_;
+        if (args.items[0].name != null) try self.err("unexpected named return type");
+        args.deinit(self.ast.allocator);
+        return Node.Proto{ .args = Node.List(Node.Proto.Arg){}, .return_type = type_ };
+    }
+
     try self.consume(.Arrow);
     const type_ = try self.parseTypeOpt();
     return Node.Proto{ .args = args, .return_type = type_ };
@@ -314,7 +322,8 @@ fn parseTypeBlock(self: *Self) ParseError!*Node {
             try self.consume(.LeftBracket);
             const proto = try self.parseProto();
             try self.consume(.RightBracket);
-            const body = try self.expression(.AllowAssign);
+            const body = if (!self.next.tokenType.isTerminal())
+                try self.expression(.AllowAssign) else null;
             return self.createNode(.FnBlock, .{ .proto = proto, .body = body });
         },
         else => unreachable,
@@ -461,7 +470,7 @@ fn consume(self: *Self, expect: TokenType) ParseError!void {
 
 fn ensure(self: *Self, expect: TokenType) ParseError!void {
     if (self.current.tokenType != expect)
-        try self.errFmt("expected token '{}'.", .{expect.toChars()});
+        try self.errFmt("expected token '{}', found '{}'.", .{expect.toChars(), self.current.tokenType.toChars()});
 }
 
 fn unexpect(self: *Self, unexpected: TokenType) ParseError!void {

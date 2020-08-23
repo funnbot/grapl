@@ -55,7 +55,7 @@ fn printNode(node: *Node, depth: usize, last: bool, out_stream: anytype) Error!v
         .FnBlock => {
             const fn_block = node.as(.FnBlock);
             try printProto(&fn_block.proto, depth + 1, out_stream);
-            try printNode(fn_block.body, depth + 1, false, out_stream);
+            if (fn_block.body) |body| try printNode(body, depth + 1, false, out_stream);
         },
         .Literal => {
             const literal = node.as(.Literal);

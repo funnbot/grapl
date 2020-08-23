@@ -99,7 +99,8 @@ pub const Block = struct {
 pub const FnBlock = struct {
     base: Node = undefined,
     proto: Proto,
-    body: *Node,
+    /// Null = fn block pointer
+    body: ?*Node,
 };
 
 // Expressions
