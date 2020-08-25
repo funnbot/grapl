@@ -7,6 +7,8 @@ const TypeInfo = std.builtin.TypeInfo;
 const Allocator = std.mem.Allocator;
 const FileWriter = std.fs.File.Writer;
 
+const GenTagType = @import("../Compose.zig").GenTagType;
+
 const Scanner = @import("../Scanner.zig");
 const Token = Scanner.Token;
 const TokenType = Scanner.TokenType;
@@ -16,18 +18,20 @@ const ansi = @import("../ansi.zig");
 const Node = @This();
 
 // Base
-tag: Tag,
+tag: Tag = undefined,
+lc: Token.Lc = undefined,
 
-pub fn create(allocator: *Allocator, comptime tag: Tag, init_args: anytype) !*Node {
-    var node = try allocator.create(tag.Type());
+pub fn create(allocator: *Allocator, comptime tag: Tag, lc: Token.Lc, init_args: anytype) !*Node {
+    var node = try allocator.create(genTagType.Type(tag));
     node.* = init_args;
-    node.base = Node{ .tag = tag };
+    node.base.tag = tag;
+    node.base.lc = lc;
     return &node.base;
 }
 
-pub fn as(self: *Node, comptime tag: Tag) *(tag.Type()) {
+pub fn as(self: *Node, comptime tag: Tag) *(genTagType.Type(tag)) {
     assert(self.tag == tag);
-    return self.asType(tag.Type());
+    return self.asType(genTagType.Type(tag));
 }
 
 pub fn asType(self: *Node, comptime T: type) *T {
@@ -38,35 +42,8 @@ pub fn is(self: *Node, comptime tag: Tag) bool {
     return self.tag == tag;
 }
 
-pub const Tag = enum {
-    VarDefine,
-    Block,
-    FnBlock,
-    If,
-    While,
-    Ternary,
-    BinaryOp,
-    UnaryOp,
-    FuncCall,
-    Variable,
-    Literal,
-    Tuple,
-    Error,
-
-    pub fn Type(comptime self: Tag) type {
-        inline for (meta.declarations(Node)) |decl| {
-            // All node structs will be:
-            // public, of type Struct, have a base field of Node
-            if (decl.is_pub and
-                @as(@TagType(TypeInfo.Declaration.Data), decl.data) == .Type and
-                @hasField(decl.data.Type, "base") and
-                decl.name.len == @tagName(self).len and
-                std.mem.eql(u8, decl.name, @tagName(self)))
-                return decl.data.Type;
-        }
-        @compileLog("unmatched type tag", self);
-    }
-};
+const genTagType = GenTagType(Node, Nodes, 15).init();
+pub const Tag = genTagType.TagType;
 
 pub const Identifier = []const u8;
 
@@ -80,90 +57,92 @@ pub const Proto = struct {
     return_type: ?*Node,
 };
 
-// Statements
-pub const VarDefine = struct {
-    base: Node = undefined,
-    name: Identifier,
-    type_: ?*Node,
-    value: *Node,
-    mut: bool,
-};
+pub const Nodes = struct {
+    // Statements
+    pub const VarDefine = struct {
+        base: Node = undefined,
+        name: Identifier,
+        type_: ?*Node,
+        value: *Node,
+        mut: bool,
+    };
 
-pub const Block = struct {
-    base: Node = undefined,
-    list: NodeList = NodeList{},
-};
+    pub const Block = struct {
+        base: Node = undefined,
+        list: NodeList = NodeList{},
+    };
 
-// Type Nodes
+    // Type Nodes
 
-pub const FnBlock = struct {
-    base: Node = undefined,
-    proto: Proto,
-    /// Null = fn block pointer
-    body: ?*Node,
-};
+    pub const FnBlock = struct {
+        base: Node = undefined,
+        proto: Proto,
+        /// Null = fn block pointer
+        body: ?*Node,
+    };
 
-// Expressions
+    // Expressions
 
-pub const If = struct {
-    base: Node = undefined,
-    cond: *Node,
-    body: *Node,
-    /// IfNode for elif, Statement for else
-    elif: ?*Node,
-};
+    pub const If = struct {
+        base: Node = undefined,
+        cond: *Node,
+        body: *Node,
+        /// IfNode for elif, Statement for else
+        elif: ?*Node,
+    };
 
-pub const While = struct {
-    base: Node = undefined,
-    cond: *Node,
-    body: *Node,
-};
+    const While = struct {
+        base: Node = undefined,
+        cond: *Node,
+        body: *Node,
+    };
 
-pub const Ternary = struct {
-    base: Node = undefined,
-    cond: *Node,
-    first: *Node,
-    second: *Node,
-};
+    pub const Ternary = struct {
+        base: Node = undefined,
+        cond: *Node,
+        first: *Node,
+        second: *Node,
+    };
 
-pub const BinaryOp = struct {
-    base: Node = undefined,
-    left: *Node,
-    op: TokenType,
-    right: *Node,
-};
+    pub const BinaryOp = struct {
+        base: Node = undefined,
+        left: *Node,
+        op: TokenType,
+        right: *Node,
+    };
 
-pub const UnaryOp = struct {
-    base: Node = undefined,
-    op: TokenType,
-    right: *Node,
-};
+    pub const UnaryOp = struct {
+        base: Node = undefined,
+        op: TokenType,
+        right: *Node,
+    };
 
-pub const FuncCall = struct {
-    base: Node = undefined,
-    callee: *Node,
-    args: *Node,
-};
+    pub const FuncCall = struct {
+        base: Node = undefined,
+        callee: *Node,
+        args: *Node,
+    };
 
-pub const Variable = struct {
-    base: Node = undefined,
-    name: Identifier,
-};
+    pub const Variable = struct {
+        base: Node = undefined,
+        name: Identifier,
+    };
 
-pub const Tuple = struct {
-    base: Node = undefined,
-    list: NodeList = NodeList{},
-};
+    pub const Tuple = struct {
+        base: Node = undefined,
+        list: NodeList = NodeList{},
+    };
 
-pub const Literal = struct {
-    base: Node = undefined,
-    chars: Identifier,
-    typename: TokenType,
-};
+    pub const Literal = struct {
+        base: Node = undefined,
+        chars: Identifier,
+        typename: TokenType,
+    };
 
-pub const Error = struct {
-    base: Node = undefined,
-    msg: []const u8,
+    pub const Error = struct {
+        base: Node = undefined,
+        msg: []const u8,
+    };
 };
 
 pub const List = std.ArrayListUnmanaged;

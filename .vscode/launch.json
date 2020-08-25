@@ -4,6 +4,7 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+
         {
             "name": "(lldb) Launch",
             "type": "cppdbg",
@@ -12,6 +13,19 @@
             "args": [ "test.gpl" ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "lldb",
+        }
+
+        {
+            "name": "(lldb) Build",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "/Users/dillon/Github/zig-master/build/bin/zig",
+            "args": [ "build" ],
+            "stopAtEntry": false,
+            "cwd": "/Users/dillon/Github/zig-master/build/bin",
             "environment": [],
             "externalConsole": false,
             "MIMode": "lldb",

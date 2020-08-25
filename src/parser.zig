@@ -33,7 +33,6 @@ allocator: *Allocator,
 scanner: Scanner = undefined,
 ast: Ast = undefined,
 
-path: ?[]const u8 = null,
 parser_error_opt: ParserErrorOption = undefined,
 //state: ParseState = .Start,
 
@@ -51,10 +50,9 @@ pub fn init(allocator: *Allocator) Self {
 pub const ParserErrorOption = enum { ShowErrors, SuppressErrors };
 /// Caller owns ast, use ast.destroy()
 pub fn parse(self: *Self, source: []const u8, parser_error_opt: ParserErrorOption, path: ?[]const u8) ParseError!Ast {
-    self.path = path;
     self.scanner = Scanner.init(source);
 
-    self.ast = Ast.init(self.allocator);
+    self.ast = Ast.init(self.allocator, source, path);
     errdefer self.ast.deinit();
 
     self.hasError = false;
@@ -88,11 +86,11 @@ fn parseTypeOpt(self: *Self) ParseError!?*Node {
 fn parseType(self: *Self) ParseError!*Node {
     try self.ensure(.Identifier);
 
-    const typename = self.current.chars;
-    var node = try self.createNode(.Variable, .{ .name = typename });
+    var node = try self.createNode(.Variable, self.current, .{ .name = self.current.chars });
     while (self.matchAdvance(.LeftParen)) {
+        const parenToken = self.current;
         const args = try self.parseGroup(.AllowEmpty);
-        node = try self.createNode(.FuncCall, .{ .callee = node, .args = args });
+        node = try self.createNode(.FuncCall, parenToken, .{ .callee = node, .args = args });
     }
     return node;
 }
@@ -102,9 +100,11 @@ fn parseProto(self: *Self) ParseError!Node.Proto {
     if (self.next.tokenType == .RightBracket)
         return Node.Proto{ .args = args, .return_type = null };
 
+    var specialCaseArgToken: Token = undefined;
     if (self.next.tokenType != .Arrow) {
         while (true) {
             try self.consume(.Identifier);
+            specialCaseArgToken = self.current;
             var name: ?Node.Identifier = null;
             if (self.next.tokenType == .Identifier) {
                 name = self.current.chars;
@@ -119,7 +119,7 @@ fn parseProto(self: *Self) ParseError!Node.Proto {
     // Special case for fn [Int] being: Int is the return type
     if (args.items.len == 1 and self.next.tokenType != .Arrow) {
         const type_ = args.items[0].type_;
-        if (args.items[0].name != null) try self.err("unexpected named return type");
+        if (args.items[0].name != null) try self.err(specialCaseArgToken, "unexpected named return type");
         args.deinit(self.ast.allocator);
         return Node.Proto{ .args = Node.List(Node.Proto.Arg){}, .return_type = type_ };
     }
@@ -179,7 +179,7 @@ inline fn parsePrec(self: *Self, prec: Precedence) ParseError!*Node {
         .Call => self.parseCall(),
         .Base => self.parseBase(),
 
-        .None => self.errNode("unexpected expression."),
+        .None => self.errNode(self.next, "unexpected expression."),
     };
 }
 
@@ -206,15 +206,18 @@ fn parseDecl(self: *Self, prec: Precedence) ParseError!*Node {
         // Parse variable, pass if ^, fail match !, fail match next Identifier, fail match :=, return
         const name = node.as(.Variable).name;
         const is_mut = self.matchAdvance(.Bang);
+        const bangToken = self.current;
 
+        const typeToken = self.next;
         const typename = try self.parseTypeOpt();
         errdefer if (typename) |tn| self.destroyNode(tn);
 
+        const declToken = self.next;
         if (!self.matchAdvance(.ColonEqual)) {
-            if (is_mut) try self.err("unexpected '!'.");
+            if (is_mut) try self.err(bangToken, "unexpected '!'.");
             if (typename) |tn| {
                 self.destroyNode(tn);
-                try self.err("unexpected type.");
+                try self.err(typeToken, "unexpected type.");
             }
             return node;
         }
@@ -225,7 +228,7 @@ fn parseDecl(self: *Self, prec: Precedence) ParseError!*Node {
         const value = try self.expression(.NoAssign);
         errdefer self.destroyNode(value);
 
-        return self.createNode(.VarDefine, .{
+        return self.createNode(.VarDefine, declToken, .{
             .name = name,
             .type_ = typename,
             .value = value,
@@ -239,10 +242,11 @@ fn parseDecl(self: *Self, prec: Precedence) ParseError!*Node {
 fn parseTernary(self: *Self, prec: Precedence) ParseError!*Node {
     const node = try self.parsePrec(prec.next());
     if (self.matchAdvance(.Question)) {
+        const questionToken = self.current;
         var first = try self.expression(.NoAssign);
         try self.consume(.Colon);
         var second = try self.expression(.NoAssign);
-        return self.createNode(.Ternary, .{
+        return self.createNode(.Ternary, questionToken, .{
             .cond = node,
             .first = first,
             .second = second,
@@ -256,11 +260,11 @@ fn parseBinary(self: *Self, prec: Precedence) ParseError!*Node {
     var node = try self.parsePrec(prec.next());
     while (Precedence.ofBin(self.next.tokenType).value() >= prec.value()) {
         self.advance();
-        const tokenType = self.current.tokenType;
+        const binaryToken = self.current;
         const next = try self.parsePrec(prec.next());
-        node = try self.createNode(.BinaryOp, .{
+        node = try self.createNode(.BinaryOp, binaryToken, .{
             .left = node,
-            .op = tokenType,
+            .op = binaryToken.tokenType,
             .right = next,
         });
     }
@@ -272,9 +276,9 @@ fn parseUnary(self: *Self, prec: Precedence) ParseError!*Node {
 
     if (self.next.tokenType.isUnary()) {
         self.advance();
-        const tokenType = self.current.tokenType;
+        const unaryToken = self.current;
         const next = try self.parsePrec(prec);
-        node = try self.createNode(.UnaryOp, .{ .op = tokenType, .right = next });
+        node = try self.createNode(.UnaryOp, unaryToken, .{ .op = unaryToken.tokenType, .right = next });
     }
     return node orelse self.parsePrec(prec.next());
 }
@@ -284,8 +288,9 @@ fn parseCall(self: *Self) ParseError!*Node {
     errdefer self.destroyNode(node);
 
     if (self.next.tokenType == .LeftParen) {
+        const callToken = self.next;
         var args = try self.parseGroup(.AllowEmpty);
-        return self.createNode(.FuncCall, .{ .callee = node, .args = args });
+        return self.createNode(.FuncCall, callToken, .{ .callee = node, .args = args });
     }
 
     return node;
@@ -298,7 +303,7 @@ fn parseCall(self: *Self) ParseError!*Node {
 fn parseBase(self: *Self) ParseError!*Node {
     self.advance();
     if (self.current.tokenType.isConstant()) {
-        return self.createNode(.Literal, .{
+        return self.createNode(.Literal, self.current, .{
             .chars = self.current.chars,
             .typename = self.current.tokenType,
         });
@@ -308,23 +313,26 @@ fn parseBase(self: *Self) ParseError!*Node {
 
     return switch (self.current.tokenType) {
         .LeftParen => self.parseGroup(.RequireValue),
-        .Identifier => self.createNode(.Variable, .{ .name = self.current.chars }),
+        .Identifier => self.createNode(.Variable, self.current, .{ .name = self.current.chars }),
         .LeftBrace => self.parseBlock(),
         .If => self.parseIf(),
         .While => self.parseWhile(),
-        else => self.errNode("expect variable"),
+        else => self.errNode(self.current, "expect variable"),
     };
 }
 
 fn parseTypeBlock(self: *Self) ParseError!*Node {
+    const blockToken = self.current;
     switch (self.current.tokenType) {
         .Fn => {
             try self.consume(.LeftBracket);
             const proto = try self.parseProto();
             try self.consume(.RightBracket);
             const body = if (!self.next.tokenType.isTerminal())
-                try self.expression(.AllowAssign) else null;
-            return self.createNode(.FnBlock, .{ .proto = proto, .body = body });
+                try self.expression(.AllowAssign)
+            else
+                null;
+            return self.createNode(.FnBlock, blockToken, .{ .proto = proto, .body = body });
         },
         else => unreachable,
     }
@@ -332,21 +340,22 @@ fn parseTypeBlock(self: *Self) ParseError!*Node {
 
 const ParseTupleAllowEmpty = enum { AllowEmpty, RequireValue };
 fn parseGroup(self: *Self, allow_empty: ParseTupleAllowEmpty) ParseError!*Node {
+    const parenToken = self.current;
     if (self.matchAdvance(.RightParen)) {
         if (allow_empty == .RequireValue)
-            return self.errNode("expect tuple to have atleast one value.");
+            return self.errNode(parenToken, "expect tuple to have atleast one value.");
 
-        return self.createNode(.Tuple, .{});
+        return self.createNode(.Tuple, parenToken, .{});
     }
 
     const group = try self.expression(.NoAssign);
     errdefer self.destroyNode(group);
 
-    // Generally func calls will allow empty, if one argument, still want a tuple.
+    // Generally func calls will allow empty, ie. if one argument, still want a tuple.
     if (self.next.tokenType == .Comma or allow_empty == .AllowEmpty) {
-        var node = try self.createNode(.Tuple, .{});
+        var node = try self.createNode(.Tuple, parenToken, .{});
         errdefer self.destroyNode(node);
-        var tuple: *Node.Tuple = node.as(.Tuple);
+        var tuple: *Node.Nodes.Tuple = node.as(.Tuple);
         try self.appendList(&tuple.list, group);
 
         var infLoop: usize = 0;
@@ -365,7 +374,7 @@ fn parseGroup(self: *Self, allow_empty: ParseTupleAllowEmpty) ParseError!*Node {
 }
 
 fn parseBlock(self: *Self) ParseError!*Node {
-    var node = try self.createNode(.Block, .{});
+    var node = try self.createNode(.Block, self.current, .{});
     errdefer self.destroyNode(node);
     var block = node.as(.Block);
 
@@ -384,6 +393,7 @@ fn parseBlock(self: *Self) ParseError!*Node {
 }
 
 fn parseIf(self: *Self) ParseError!*Node {
+    const ifToken = self.current;
     try self.consume(.LeftParen);
     const cond = try self.expression(.NoAssign);
     errdefer self.destroyNode(cond);
@@ -395,7 +405,7 @@ fn parseIf(self: *Self) ParseError!*Node {
     const chain = try self.parseElifOrElse();
     errdefer if (chain) |c| self.destroyNode(c);
 
-    return self.createNode(.If, .{
+    return self.createNode(.If, ifToken, .{
         .cond = cond,
         .body = body,
         .elif = chain,
@@ -404,6 +414,7 @@ fn parseIf(self: *Self) ParseError!*Node {
 
 fn parseElifOrElse(self: *Self) ParseError!?*Node {
     if (self.matchAdvance(.Elif)) {
+        const elifToken = self.current;
         try self.consume(.LeftParen);
         const cond = try self.expression(.NoAssign);
         errdefer self.destroyNode(cond);
@@ -415,7 +426,7 @@ fn parseElifOrElse(self: *Self) ParseError!?*Node {
         const inner = try self.parseElifOrElse();
         errdefer if (inner) |i| self.destroyNode(i);
 
-        return self.createNode(.If, .{
+        return self.createNode(.If, elifToken, .{
             .cond = cond,
             .body = body,
             .elif = inner,
@@ -431,6 +442,7 @@ fn parseElifOrElse(self: *Self) ParseError!?*Node {
 }
 
 fn parseWhile(self: *Self) ParseError!*Node {
+    const whileToken = self.current;
     try self.consume(.LeftParen);
     const cond = try self.expression(.NoAssign);
     errdefer self.destroyNode(cond);
@@ -439,7 +451,7 @@ fn parseWhile(self: *Self) ParseError!*Node {
     const body = try self.expression(.AllowAssign);
     errdefer self.destroyNode(body);
 
-    return self.createNode(.While, .{
+    return self.createNode(.While, whileToken, .{
         .cond = cond,
         .body = body,
     });
@@ -465,55 +477,39 @@ fn matchAdvance(self: *Self, expect: TokenType) bool {
 /// Expect a specific token, error if not
 fn consume(self: *Self, expect: TokenType) ParseError!void {
     if (!self.matchAdvance(expect))
-        try self.errFmt("expected token '{}', found '{}'.", .{ expect.toChars(), self.next.tokenType.toChars() });
+        try self.errFmt(self.next, "expected token '{}', found '{}'.", .{ expect.toChars(), self.next.tokenType.toChars() });
 }
 
 fn ensure(self: *Self, expect: TokenType) ParseError!void {
     if (self.current.tokenType != expect)
-        try self.errFmt("expected token '{}', found '{}'.", .{expect.toChars(), self.current.tokenType.toChars()});
+        try self.errFmt(self.current, "expected token '{}', found '{}'.", .{ expect.toChars(), self.current.tokenType.toChars() });
 }
 
 fn unexpect(self: *Self, unexpected: TokenType) ParseError!void {
     if (self.next.tokenType == unexpected)
-        try self.errFmt("unexpected token `{}`", .{unexpected.toChars()});
+        try self.errFmt(self.next, "unexpected token `{}`", .{unexpected.toChars()});
 }
 
 // --------------
 // Error handling
 // --------------
 
-fn err(self: *Self, msg: []const u8) ParseError!void {
-    return self.errFmt("{}", .{msg});
+fn err(self: *Self, token: Token, msg: []const u8) ParseError!void {
+    return self.errFmt(token, "{}", .{msg});
 }
 
-fn errFmt(self: *Self, comptime fmt: []const u8, args: anytype) ParseError!void {
+fn errFmt(self: *Self, token: Token, comptime fmt: []const u8, args: anytype) ParseError!void {
     if (self.hasError) return;
     self.hasError = true;
 
     if (self.parser_error_opt != .ShowErrors) return;
 
-    const bold = ansi.attr(ansi.AT.Bold);
-    const redBold = ansi.multi(.{ ansi.red, bold });
-
-    if (self.path) |p| {
-        stderr.print(comptime bold("./{}:{}:{}: "), .{ p, self.current.line, self.current.column }) catch return ParseError.StdOutWrite;
-    }
-
-    stderr.print(redBold("error: ") ++ bold(fmt) ++ "\n", args) catch return ParseError.StdOutWrite;
-
-    if (self.path != null) {
-        stderr.print("{}\n", .{self.current.lineSlice}) catch return ParseError.StdOutWrite;
-        var i: usize = 1;
-        while (i < self.next.column) : (i += 1)
-            stderr.writeAll(" ") catch return ParseError.StdOutWrite;
-
-        stderr.writeAll(ansi.yellow("^") ++ "\n") catch return ParseError.StdOutWrite;
-    }
+    self.ast.errFmt(token.lc, fmt, args, stderr) catch return ParseError.StdOutWrite;
 }
 
-fn errNode(self: *Self, msg: []const u8) ParseError!*Node {
-    try self.err(msg);
-    return self.createNode(.Error, .{ .msg = msg });
+fn errNode(self: *Self, token: Token, msg: []const u8) ParseError!*Node {
+    try self.err(token, msg);
+    return self.createNode(.Error, token, .{ .msg = msg });
 }
 
 // Needs some work
@@ -538,8 +534,8 @@ fn synchronize(self: *Self) void {
 // ParseError wrapping
 // -------------------s
 
-fn createNode(self: *Self, comptime tag: Node.Tag, init_args: anytype) ParseError!*Node {
-    return self.ast.createNode(tag, init_args) catch return ParseError.AstAlloc;
+fn createNode(self: *Self, comptime tag: Node.Tag, token: Token, init_args: anytype) ParseError!*Node {
+    return self.ast.createNode(tag, token.lc, init_args) catch return ParseError.AstAlloc;
 }
 
 fn appendList(self: *Self, list: *Node.List(*Node), node: *Node) ParseError!void {

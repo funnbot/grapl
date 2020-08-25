@@ -12,6 +12,7 @@ pub const Error = error{
     BrokenPipe,
     SystemResources,
     OperationAborted,
+    NotOpenForWriting,
     WouldBlock,
     Unexpected,
 };

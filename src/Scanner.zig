@@ -7,10 +7,13 @@ pub const TokenType = @import("token/token_type.zig").TokenType;
 pub const Token = struct {
     tokenType: TokenType,
     chars: []const u8,
-    line: usize,
-    column: usize,
+    lc: Lc,
 
-    lineSlice: []const u8,
+    pub const Lc = struct {
+        line: usize,
+        lineStr: []const u8,
+        column: usize,
+    };
 
     pub fn format(self: Token, comptime fmt: []const u8, opts: std.fmt.FormatOptions, out_stream: anytype) !void {
         try out_stream.print("{} {}", .{
@@ -320,9 +323,11 @@ fn errorToken(self: *Self, msg: []const u8) Token {
     return Token{
         .tokenType = TokenType.Error,
         .chars = msg,
-        .line = self.line,
-        .column = self.column - 1,
-        .lineSlice = "",
+        .lc = .{
+            .line = self.line,
+            .column = self.column - 1,
+            .lineStr = "",
+        },
     };
 }
 
@@ -332,9 +337,11 @@ fn makeToken(self: *Self, tokenType: TokenType) Token {
     return Token{
         .tokenType = tokenType,
         .chars = chars,
-        .line = self.line,
-        .column = self.column - chars.len,
-        .lineSlice = self.lineSlice,
+        .lc = .{
+            .line = self.line,
+            .column = self.column - chars.len,
+            .lineStr = self.lineSlice,
+        },
     };
 }
 
