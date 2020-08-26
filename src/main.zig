@@ -60,19 +60,16 @@ fn runFile(allocator: *std.mem.Allocator, source: []const u8) !void {
             std.debug.warn("{}\n", .{token});
     }
 
+    var parser = Parser.init(allocator);
+    var ast = try parser.parse(source, .ShowErrors, path);
     if (PRINT_AST) {
-        std.debug.warn("AST: \n", .{});
-        var parser = Parser.init(allocator);
-        var ast = try parser.parse(source, .ShowErrors, path);
+        std.debug.print("AST: \n", .{});
         try ast.print();
-        ast.deinit();
     }
-
     if (PRINT_AST_TO_SOURCE) {
-        std.debug.warn("AST to Source: \n", .{});
-        var parser = Parser.init(allocator);
-        var ast = try parser.parse(source, .SuppressErrors, path);
+        std.debug.print("AST to Source: \n", .{});
         try ast.render();
-        ast.deinit();
     }
+    try ast.typeCheck();
+    ast.deinit();
 }
