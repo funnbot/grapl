@@ -334,6 +334,7 @@ fn parseTypeBlock(self: *Self) ParseError!*Node {
                 null;
             return self.createNode(.FnBlock, blockToken, .{ .proto = proto, .body = body });
         },
+    
         else => unreachable,
     }
 }
