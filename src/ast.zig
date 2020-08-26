@@ -11,6 +11,7 @@ pub const Node = @import("ast/Node.zig");
 const printAST = @import("ast/print.zig").printList;
 const renderAST = @import("ast/render.zig").render;
 const destroyAST = @import("ast/destroy.zig");
+const TypeChecker = @import("TypeChecker.zig");
 
 const Self = @This();
 
@@ -54,6 +55,11 @@ pub fn destroyNode(self: *Self, node: *Node) void {
     destroyAST.destroyNode(self.allocator, node);
 }
 
+pub fn typeCheck(self: *Self) !void {
+    var checker = TypeChecker.init(self);
+    try checker.resolve();
+}
+
 pub fn err(lc: Token.Lc, msg: []const u8, out_stream: anytype) !void {
     return out_stream.errFormat(token, "{}", .{msg});
 }
@@ -62,7 +68,7 @@ const errBold = ansi.attr(ansi.AT.Bold);
 const errRedBold = ansi.multi(.{ ansi.red, errBold });
 pub fn errFmt(self: *Self, lc: Token.Lc, comptime fmt: []const u8, args: anytype, out_stream: anytype) !void {
     if (self.path) |path| try errLocation(path, lc, out_stream);
-    try out_stream.print(errRedBold("error: ") ++ errBold(fmt) ++ "\n", args);
+    try out_stream.print(errRedBold(" error: ") ++ errBold(fmt) ++ "\n", args);
     try errCaret(lc, out_stream);
 }
 

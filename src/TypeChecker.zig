@@ -15,15 +15,15 @@ pub fn init(ast: *Ast) Self {
     return .{.ast = ast};
 }
 
-pub fn resolve(self: *Self) void {
-    for (stmts.items) |item| {
-        resolveTopLevel(item);
+pub fn resolve(self: *Self) Error!void {
+    for (self.ast.stmts.items) |item| {
+        try self.resolveTopLevel(item);
     }
 }
 
-fn resolveTopLevel(self: *Self, node: *Node) void {
+fn resolveTopLevel(self: *Self, node: *Node) Error!void {
     switch (node.tag) {
-        else => self.errFmt(node, "unallowed top level node '{}'", .{@tagName(node.tag)}),
+        else => try self.errFmt(node, "unallowed top level node '{}'", .{@tagName(node.tag)}),
     }
 }
 
