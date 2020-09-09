@@ -11,7 +11,7 @@ pub const Node = @import("ast/Node.zig");
 const printAST = @import("ast/print.zig").printList;
 const renderAST = @import("ast/render.zig").render;
 const destroyAST = @import("ast/destroy.zig");
-const TypeChecker = @import("TypeChecker.zig");
+const TypeResolver = @import("TypeResolver.zig");
 
 const Self = @This();
 
@@ -55,9 +55,9 @@ pub fn destroyNode(self: *Self, node: *Node) void {
     destroyAST.destroyNode(self.allocator, node);
 }
 
-pub fn typeCheck(self: *Self) !void {
-    var checker = TypeChecker.init(self);
-    try checker.resolve();
+pub fn typeResolve(self: *Self) !void {
+    var resolver = TypeResolver.init(self.allocator, self);
+    try resolver.resolve();
 }
 
 pub fn err(lc: Token.Lc, msg: []const u8, out_stream: anytype) !void {

@@ -135,8 +135,31 @@ pub const Nodes = struct {
 
     pub const Literal = struct {
         base: Node = undefined,
-        chars: Identifier,
-        typename: TokenType,
+        buffer: []const u8,
+        data: Data,
+
+        pub const Data = union(enum) {
+            Int: i64,
+            Float: f64,
+            Char: u8,
+            /// Literal owns string, created with ast allocator,
+            String: []const u8,
+            Bool: bool,
+            Null: u0,
+            Void: u0,
+
+            pub fn format(self: Data, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+                return switch (self) {
+                    .Int => |val| writer.print("{d}", .{val}), 
+                    .Float => |val| writer.print("{d:.2}", .{val}),
+                    .Char => |val| writer.print("{c}", .{val}),
+                    .String => |val| writer.print("{}", .{val}),
+                    .Bool => |val| writer.print("{}", .{val}),
+                    .Null => writer.writeAll("null"),
+                    .Void => writer.writeAll("void"),
+                };
+            }
+        };
     };
 
     pub const Error = struct {
@@ -148,7 +171,7 @@ pub const Nodes = struct {
 pub const List = std.ArrayListUnmanaged;
 pub const NodeList = List(*Node);
 
-test "why" {
+test "var define node" {
     std.debug.print("\n", .{});
     var node = try Node.create(std.testing.allocator, .VarDefine, .{
         .name = "foo",

@@ -35,7 +35,7 @@ pub const TokenType = enum {
         return s >= @enumToInt(TokenType.Struct) and s <= @enumToInt(TokenType.Case);
     }
 
-    pub fn isConstant(self: TokenType) bool {
+    pub fn isLiteral(self: TokenType) bool {
         const s = @enumToInt(self);
         return s >= @enumToInt(TokenType.True) and s <= @enumToInt(TokenType.Bin);
     }

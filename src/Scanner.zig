@@ -6,7 +6,7 @@ pub const TokenType = @import("token/token_type.zig").TokenType;
 
 pub const Token = struct {
     tokenType: TokenType,
-    chars: []const u8,
+    buffer: []const u8,
     lc: Lc,
 
     pub const Lc = struct {
@@ -18,7 +18,7 @@ pub const Token = struct {
     pub fn format(self: Token, comptime fmt: []const u8, opts: std.fmt.FormatOptions, out_stream: anytype) !void {
         try out_stream.print("{} {}", .{
             @tagName(self.tokenType),
-            self.chars,
+            self.buffer,
         });
     }
 };
@@ -116,7 +116,14 @@ fn constant(self: *Self) ?Token {
 fn string(self: *Self) ?Token {
     // advance past terminator
     const term = self.advance();
+    var slash_count: usize = 0;
     while (!self.isEOF(0) and self.peek(0) != term) {
+        if (self.peek(0) == '\\') {
+            slash_count += 1;
+
+            if (self.peek(1) == '"' and slash_count % 2 == 0) self.step();
+        } else slash_count = 0;
+
         if (self.peek(0) == '\n') self.line += 1;
         self.step();
     }
@@ -310,7 +317,7 @@ fn isEOF(self: *Self, count: usize) bool {
     return self.current + count >= self.source.len;
 }
 
-fn currentChars(self: *Self) []const u8 {
+fn currentBuffer(self: *Self) []const u8 {
     return self.source[self.start..self.current];
 }
 
@@ -322,7 +329,7 @@ fn currentLen(self: *Self) usize {
 fn errorToken(self: *Self, msg: []const u8) Token {
     return Token{
         .tokenType = TokenType.Error,
-        .chars = msg,
+        .buffer = msg,
         .lc = .{
             .line = self.line,
             .column = self.column - 1,
@@ -332,14 +339,14 @@ fn errorToken(self: *Self, msg: []const u8) Token {
 }
 
 fn makeToken(self: *Self, tokenType: TokenType) Token {
-    const chars = self.currentChars();
-    //if (chars.len == 0) return self.errorToken("Zero length token.");
+    const buffer = self.currentBuffer();
+    //if (buffer.len == 0) return self.errorToken("Zero length token.");
     return Token{
         .tokenType = tokenType,
-        .chars = chars,
+        .buffer = buffer,
         .lc = .{
             .line = self.line,
-            .column = self.column - chars.len,
+            .column = self.column - buffer.len,
             .lineStr = self.lineSlice,
         },
     };
@@ -374,4 +381,7 @@ test "scanner constants" {
     expectToken(".123", .Float);
     expectToken("1_000_000.000_000_1", .Float);
     expectToken("1000.", .Float);
+
+    expectToken("\"how\"", .String);
+    expectToken("\" \\\" hee\"", .String);
 }

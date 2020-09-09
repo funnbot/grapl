@@ -60,7 +60,12 @@ pub fn destroyNode(ator: *Allocator, node: *Node) void {
             const tuple = node.as(.Tuple);
             destroyList(ator, &tuple.list);
         },
-        .Variable, .Literal, .Error => {},
+        .Literal => {
+            const literal = node.as(.Literal);
+            if (literal.data == .String)
+                ator.free(literal.data.String);
+        },
+        .Variable, .Error => {},
     }
     ator.destroy(node);
 }

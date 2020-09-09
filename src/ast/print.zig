@@ -3,27 +3,13 @@ const Node = @import("Node.zig");
 
 const MAX_DEPTH = 20;
 
-pub const Error = error{
-    DiskQuota,
-    FileTooBig,
-    InputOutput,
-    NoSpaceLeft,
-    AccessDenied,
-    BrokenPipe,
-    SystemResources,
-    OperationAborted,
-    NotOpenForWriting,
-    WouldBlock,
-    Unexpected,
-};
-
-pub fn printList(list: *Node.List(*Node), depth: usize, out_stream: anytype) Error!void {
+pub fn printList(list: *Node.List(*Node), depth: usize, out_stream: anytype) !void {
     for (list.items) |item, i| {
         try printNode(item, depth, (i + 1 == list.items.len), out_stream);
     }
 }
 
-fn printNode(node: *Node, depth: usize, last: bool, out_stream: anytype) Error!void {
+fn printNode(node: *Node, depth: usize, last: bool, out_stream: anytype) anyerror!void {
     if (depth > MAX_DEPTH) return;
 
     try printTree(@tagName(node.tag), depth, last, out_stream);
@@ -56,11 +42,11 @@ fn printNode(node: *Node, depth: usize, last: bool, out_stream: anytype) Error!v
         .FnBlock => {
             const fn_block = node.as(.FnBlock);
             try printProto(&fn_block.proto, depth + 1, out_stream);
-            if (fn_block.body) |body| try printNode(body, depth + 1, false, out_stream);
+            if (fn_block.body) |body| try printNode(body, depth + 1, true, out_stream);
         },
         .Literal => {
             const literal = node.as(.Literal);
-            try out_stream.print(" ({}) {}\n", .{ @tagName(literal.typename), literal.chars });
+            try out_stream.print(" ({}) {}\n", .{ @tagName(literal.data), literal.buffer });
         },
         .Variable => {
             const variable = node.as(.Variable);
@@ -104,7 +90,7 @@ fn printNode(node: *Node, depth: usize, last: bool, out_stream: anytype) Error!v
     }
 }
 
-pub fn printTree(name: []const u8, depth: usize, last: bool, out_stream: anytype) Error!void {
+pub fn printTree(name: []const u8, depth: usize, last: bool, out_stream: anytype) anyerror!void {
     const treeStyle = ansi.multi(.{ ansi.color16(ansi.FG.Red, .Bright), ansi.attr(ansi.AT.Bold) });
     const nodeStyle = ansi.multi(.{ ansi.color16(ansi.FG.Green, .Bright), ansi.attr(ansi.AT.Bold) });
 
@@ -116,7 +102,7 @@ pub fn printTree(name: []const u8, depth: usize, last: bool, out_stream: anytype
     try out_stream.print(treeStyle("{}") ++ nodeStyle("{}"), .{ pipe, name });
 }
 
-fn printProto(proto: *Node.Proto, depth: usize, out_stream: anytype) Error!void {
+fn printProto(proto: *Node.Proto, depth: usize, out_stream: anytype) anyerror!void {
     try out_stream.writeAll("\n");
     try printTree("Proto", depth, false, out_stream);
     try out_stream.writeAll("\n");

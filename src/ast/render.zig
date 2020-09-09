@@ -145,7 +145,7 @@ pub fn render(comptime out_stream: anytype, list: *Node.NodeList) !void {
                     try self.renderNode(call.callee);
                     try self.renderNode(call.args);
                 },
-                .Literal => try self.out.print(comptime literalStyle("{}"), .{node.as(.Literal).chars}),
+                .Literal => try self.out.print(comptime literalStyle("{}"), .{node.as(.Literal).buffer}),
                 .Variable => {
                     const variable = node.as(.Variable);
                     if (ascii.isUpper(variable.name[0]))

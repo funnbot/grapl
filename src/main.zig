@@ -70,6 +70,6 @@ fn runFile(allocator: *std.mem.Allocator, source: []const u8) !void {
         std.debug.print("AST to Source: \n", .{});
         try ast.render();
     }
-    try ast.typeCheck();
+    try ast.typeResolve();
     ast.deinit();
 }

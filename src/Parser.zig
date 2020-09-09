@@ -15,6 +15,9 @@ const Scanner = @import("Scanner.zig");
 const TokenType = Scanner.TokenType;
 const Token = Scanner.Token;
 
+const parseLiteral = @import("parser/literal.zig").parseLiteral;
+const ParseLiteralError = @import("parser/literal.zig").Error;
+
 const Self = @This();
 
 const INF_LOOP = 1000;
@@ -24,7 +27,7 @@ pub const ParseError = error{
     StdOutWrite,
     AstAlloc,
     ArrayListAppend,
-};
+} || ParseLiteralError;
 
 // global state
 allocator: *Allocator,
@@ -86,7 +89,7 @@ fn parseTypeOpt(self: *Self) ParseError!?*Node {
 fn parseType(self: *Self) ParseError!*Node {
     try self.ensure(.Identifier);
 
-    var node = try self.createNode(.Variable, self.current, .{ .name = self.current.chars });
+    var node = try self.createNode(.Variable, self.current, .{ .name = self.current.buffer });
     while (self.matchAdvance(.LeftParen)) {
         const parenToken = self.current;
         const args = try self.parseGroup(.AllowEmpty);
@@ -107,7 +110,7 @@ fn parseProto(self: *Self) ParseError!Node.Proto {
             specialCaseArgToken = self.current;
             var name: ?Node.Identifier = null;
             if (self.next.tokenType == .Identifier) {
-                name = self.current.chars;
+                name = self.current.buffer;
                 self.advance();
             }
             const type_ = try self.parseType();
@@ -302,10 +305,15 @@ fn parseCall(self: *Self) ParseError!*Node {
 
 fn parseBase(self: *Self) ParseError!*Node {
     self.advance();
-    if (self.current.tokenType.isConstant()) {
+    if (self.current.tokenType.isLiteral()) {
         return self.createNode(.Literal, self.current, .{
-            .chars = self.current.chars,
-            .typename = self.current.tokenType,
+            .buffer = self.current.buffer,
+            .data = (parseLiteral(self.ast.allocator, self.current) catch |e| return switch (e) {
+                ParseLiteralError.InvalidEscapeSequence => self.errNode(self.current, "invalid escape sequence."),
+                ParseLiteralError.CharTooLong => self.errNode(self.current, "char literal is longer than one character."),
+                ParseLiteralError.InvalidCharacter => self.errNode(self.current, "invalid character."),
+                else => e,
+            }),
         });
     } else if (self.current.tokenType.isTypeBlock()) {
         return self.parseTypeBlock();
@@ -313,7 +321,7 @@ fn parseBase(self: *Self) ParseError!*Node {
 
     return switch (self.current.tokenType) {
         .LeftParen => self.parseGroup(.RequireValue),
-        .Identifier => self.createNode(.Variable, self.current, .{ .name = self.current.chars }),
+        .Identifier => self.createNode(.Variable, self.current, .{ .name = self.current.buffer }),
         .LeftBrace => self.parseBlock(),
         .If => self.parseIf(),
         .While => self.parseWhile(),
@@ -334,7 +342,7 @@ fn parseTypeBlock(self: *Self) ParseError!*Node {
                 null;
             return self.createNode(.FnBlock, blockToken, .{ .proto = proto, .body = body });
         },
-    
+
         else => unreachable,
     }
 }
@@ -535,20 +543,20 @@ fn synchronize(self: *Self) void {
 // ParseError wrapping
 // -------------------s
 
-fn createNode(self: *Self, comptime tag: Node.Tag, token: Token, init_args: anytype) ParseError!*Node {
+inline fn createNode(self: *Self, comptime tag: Node.Tag, token: Token, init_args: anytype) ParseError!*Node {
     return self.ast.createNode(tag, token.lc, init_args) catch return ParseError.AstAlloc;
 }
 
-fn appendList(self: *Self, list: *Node.List(*Node), node: *Node) ParseError!void {
+inline fn appendList(self: *Self, list: *Node.List(*Node), node: *Node) ParseError!void {
     list.append(self.ast.allocator, node) catch return ParseError.ArrayListAppend;
 }
 
-fn append(self: *Self, comptime T: type, list: *Node.List(T), item: T) ParseError!void {
+inline fn append(self: *Self, comptime T: type, list: *Node.List(T), item: T) ParseError!void {
     list.append(self.ast.allocator, item) catch return ParseError.ArrayListAppend;
 }
 
 /// Careful, this will attempt to destroy all children nodes if set
-fn destroyNode(self: *Self, node: *Node) void {
+inline fn destroyNode(self: *Self, node: *Node) void {
     self.ast.destroyNode(node);
 }
 
