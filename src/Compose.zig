@@ -27,7 +27,7 @@ pub fn GenTagType(comptime Base: type, comptime Namespace: type, comptime buffer
             self.TagType = @Type(TypeInfo{
                 .Enum = .{
                     .layout = .Auto,
-                    .tag_type = meta.Int(false, std.math.ceil(std.math.log2(@intToFloat(f32, self.count)))),
+                    .tag_type = meta.Int(.unsigned, std.math.ceil(std.math.log2(@intToFloat(f32, self.count)))),
                     .fields = self.enumFieldBuffer[0..self.count],
                     .decls = &[_]TypeInfo.Declaration{},
                     .is_exhaustive = true,
